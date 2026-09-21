@@ -3,25 +3,15 @@ import Link from "next/link";
 
 export default function Home() {
   const modules = [
-    {
-      title: "Поиск по нику",
-      desc: "Проверка, на каких сайтах зарегистрирован никнейм",
-      href: "/username",
-    },
-    {
-      title: "Проверка номера",
-      desc: "Валидация формата, страны и оператора номера",
-      href: "/phone",
-    },
-    {
-      title: "Утечка пароля",
-      desc: "Проверка пароля по базе известных утечек",
-      href: "/password",
-    },
+    { title: "Поиск по нику", desc: "Проверка, на каких сайтах зарегистрирован никнейм", href: "/username" },
+    { title: "Проверка номера", desc: "Валидация формата, страны и оператора номера", href: "/phone" },
+    { title: "Утечка пароля", desc: "Проверка пароля по базе известных утечек", href: "/password" },
+    { title: "IP-анализ", desc: "Геолокация, провайдер и детекция VPN/Proxy по IP", href: "/ip" },
+    { title: "EXIF фото", desc: "Скрытые метаданные снимка: камера, дата, GPS", href: "/exif" },
   ];
 
   return (
-    <main className="min-h-screen bg-black text-white flex flex-col items-center justify-center px-6">
+    <main className="min-h-screen bg-black text-white flex flex-col items-center justify-center px-6 py-16">
       <Image src="/logo.webp" alt="Uroboros logo" width={120} height={120} className="mb-4 invert" />
       <h1 className="text-5xl font-bold mb-2 tracking-tight">Uroboros</h1>
       <p className="text-gray-400 mb-12">Легальный OSINT-инструмент</p>
