@@ -8,6 +8,7 @@ export default function Home() {
     { title: "Утечка пароля", desc: "Проверка пароля по базе известных утечек", href: "/password" },
     { title: "IP-анализ", desc: "Геолокация, провайдер и детекция VPN/Proxy по IP", href: "/ip" },
     { title: "EXIF фото", desc: "Скрытые метаданные снимка: камера, дата, GPS", href: "/exif" },
+    { title: "QR-анализатор", desc: "Проверка QR-кода на скрытую ссылку без перехода", href: "/qr" },
   ];
 
   return (
