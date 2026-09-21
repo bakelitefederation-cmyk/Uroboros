@@ -4,6 +4,9 @@ import { useState } from "react";
 type PhoneResult = {
   valid: boolean;
   country?: string;
+  region?: string;
+  city?: string;
+  carrier?: string;
   type?: string;
   international?: string;
 };
@@ -51,6 +54,9 @@ export default function PhoneCheck() {
           {result.valid && (
             <>
               <p>Страна: {result.country}</p>
+              {result.region && <p>Регион: {result.region}</p>}
+              {result.city && <p>Город: {result.city}</p>}
+              <p>Оператор: {result.carrier}</p>
               <p>Тип линии: {result.type}</p>
               <p>Формат: {result.international}</p>
             </>
