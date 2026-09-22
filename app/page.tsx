@@ -12,7 +12,7 @@ export default function Home() {
   ];
 
   return (
-    <main className="min-h-screen bg-black text-white flex flex-col items-center justify-center px-6 py-16">
+    <main className="min-h-screen bg-black/70 text-white flex flex-col items-center justify-center px-6 py-16">
       <Image src="/logo.webp" alt="Uroboros logo" width={120} height={120} className="mb-4 invert" />
       <h1 className="text-5xl font-bold mb-2 tracking-tight">Uroboros</h1>
       <p className="text-gray-400 mb-12">Легальный OSINT-инструмент</p>
