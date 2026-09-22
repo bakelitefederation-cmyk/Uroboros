@@ -55,7 +55,7 @@ export default function PhoneCheck() {
       <div className="backdrop-blur-2xl bg-white/[0.07] border border-white/20 rounded-2xl p-8 w-full max-w-md shadow-[0_0_40px_rgba(0,0,0,0.5)]">
         <h1 className="text-2xl font-bold mb-6 text-center">Валидация номера</h1>
 
-        <div className="flex gap-2">
+        <div className="flex flex-col sm:flex-row gap-2">
           <input
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
