@@ -9,6 +9,7 @@ export default function Home() {
     { title: "IP-анализ", desc: "Геолокация, провайдер и детекция VPN/Proxy по IP", href: "/ip" },
     { title: "EXIF фото", desc: "Скрытые метаданные снимка: камера, дата, GPS", href: "/exif" },
     { title: "QR-анализатор", desc: "Проверка QR-кода на скрытую ссылку без перехода", href: "/qr" },
+    { title: "Поиск по почте", desc: "Валидность домена, одноразовая почта, Gravatar-профиль", href: "/email" },
   ];
 
   return (
