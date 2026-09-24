@@ -10,6 +10,7 @@ export default function Home() {
     { title: "EXIF фото", desc: "Скрытые метаданные снимка: камера, дата, GPS", href: "/exif" },
     { title: "QR-анализатор", desc: "Проверка QR-кода на скрытую ссылку без перехода", href: "/qr" },
     { title: "Поиск по почте", desc: "Валидность домена, одноразовая почта, Gravatar-профиль", href: "/email" },
+    { title: "Обратный поиск фото", desc: "Поиск похожих изображений через Google, Yandex, TinEye, Bing", href: "/reverse-image" },
   ];
 
   return (
