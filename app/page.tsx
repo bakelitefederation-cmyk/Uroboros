@@ -13,6 +13,7 @@ export default function Home() {
     { title: "Обратный поиск фото", desc: "Поиск похожих изображений через Google, Yandex, TinEye, Bing", href: "/reverse-image" },
     { title: "Гео-мультипоиск", desc: "Координаты сразу в Google Maps, Earth, Yandex, Wikimapia, SunCalc", href: "/geo" },
     { title: "Wayback Machine", desc: "Архивные снимки страницы: удалённый и изменённый контент", href: "/wayback" },
+    { title: "Google Dork генератор", desc: "Готовые продвинутые поисковые запросы по сайту и ключевым словам", href: "/dork" },
   ];
 
   return (
