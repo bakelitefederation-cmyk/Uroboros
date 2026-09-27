@@ -14,6 +14,7 @@ export default function Home() {
     { title: "Гео-мультипоиск", desc: "Координаты сразу в Google Maps, Earth, Yandex, Wikimapia, SunCalc", href: "/geo" },
     { title: "Wayback Machine", desc: "Архивные снимки страницы: удалённый и изменённый контент", href: "/wayback" },
     { title: "Google Dork генератор", desc: "Готовые продвинутые поисковые запросы по сайту и ключевым словам", href: "/dork" },
+    { title: "Отслеживание самолётов", desc: "Позиция, высота и скорость борта в воздухе по позывному", href: "/aircraft" },
   ];
 
   return (
