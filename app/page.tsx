@@ -12,6 +12,7 @@ export default function Home() {
     { title: "Поиск по почте", desc: "Валидность домена, одноразовая почта, Gravatar-профиль", href: "/email" },
     { title: "Обратный поиск фото", desc: "Поиск похожих изображений через Google, Yandex, TinEye, Bing", href: "/reverse-image" },
     { title: "Гео-мультипоиск", desc: "Координаты сразу в Google Maps, Earth, Yandex, Wikimapia, SunCalc", href: "/geo" },
+    { title: "Wayback Machine", desc: "Архивные снимки страницы: удалённый и изменённый контент", href: "/wayback" },
   ];
 
   return (
