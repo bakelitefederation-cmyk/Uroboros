@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, ReactNode } from "react";
 import Link from "next/link";
 
 const DATABASES = [
@@ -21,6 +21,7 @@ export default function FaceSearchPage() {
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [results, setResults] = useState<any[] | null>(null);
 
   const toggleBase = (id: string) => {
     setSelectedBases((prev) =>
@@ -32,21 +33,25 @@ export default function FaceSearchPage() {
     if (e.target.files && e.target.files[0]) {
       setFile(e.target.files[0]);
       setErrorMessage(null);
+      setResults(null);
     }
   };
 
-  const handleSubmit = async () => {
-    if (!file) return;
+  const handleSubmit = async (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+    if (!file || loading) return;
+
     setLoading(true);
     setErrorMessage(null);
-
-    const formData = new FormData();
-    formData.append("photo", file);
-    formData.append("collections", JSON.stringify(selectedBases));
-    formData.append("limit", resultsPerBase.toString());
-    formData.append("includePrivate", includePrivate.toString());
+    setResults(null);
 
     try {
+      const formData = new FormData();
+      formData.append("photo", file);
+      formData.append("collections", JSON.stringify(selectedBases));
+      formData.append("limit", resultsPerBase.toString());
+      formData.append("includePrivate", includePrivate.toString());
+
       const res = await fetch("/api/face-search", {
         method: "POST",
         body: formData,
@@ -57,7 +62,7 @@ export default function FaceSearchPage() {
       if (!res.ok || data.error) {
         setErrorMessage(data.error || "Произошла ошибка при поиске.");
       } else {
-        console.log("Результаты Luxand:", data.results);
+        setResults(data.results || []);
       }
     } catch (err: any) {
       setErrorMessage("Не удалось отправить запрос к серверу.");
@@ -171,11 +176,12 @@ export default function FaceSearchPage() {
 
             <div className="mt-6">
               <button
+                type="button"
                 onClick={handleSubmit}
                 disabled={!file || loading}
-                className="w-full py-2.5 bg-zinc-500 hover:bg-zinc-400 disabled:opacity-50 text-black font-medium text-sm rounded-lg transition-all"
+                className="w-full py-2.5 bg-zinc-100 hover:bg-white active:bg-zinc-200 disabled:opacity-40 disabled:hover:bg-zinc-100 text-black font-semibold text-sm rounded-lg transition-all cursor-pointer"
               >
-                {loading ? "Поиск..." : "Найти профили"}
+                {loading ? "Выполняется поиск..." : "Найти профили"}
               </button>
               <p className="text-[10px] text-zinc-500 text-center mt-3">
                 Каждая база — отдельный запрос к API. Фото отправляется в Luxand Cloud для распознавания.
@@ -187,6 +193,28 @@ export default function FaceSearchPage() {
         {errorMessage && (
           <div className="mt-6 p-3 bg-red-950/60 border border-red-800/80 rounded-xl text-red-200 text-xs text-center font-medium">
             {errorMessage}
+          </div>
+        )}
+
+        {results && (
+          <div className="mt-8 border-t border-zinc-800 pt-6">
+            <h3 className="text-sm font-semibold mb-4">Результаты поиска:</h3>
+            {results.length === 0 ? (
+              <p className="text-xs text-zinc-400">Совпадений не найдено.</p>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                {results.map((item: any, idx: number) => (
+                  <div key={idx} className="bg-zinc-950/60 p-3 rounded-xl border border-zinc-800 flex flex-col items-center">
+                    {item.url && (
+                      <img src={item.url} alt="Result" className="w-full h-32 object-cover rounded-lg mb-2" />
+                    )}
+                    <span className="text-xs text-zinc-300 font-medium truncate w-full text-center">
+                      {item.name || `Профиль #${idx + 1}`}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>
