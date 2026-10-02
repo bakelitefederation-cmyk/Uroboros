@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 export async function POST(req: Request) {
   try {
-    const apiToken = process.env.LUXAND_API_TOKEN;
+    const apiToken = process.env.LUXAND_API_KEY;
 
     if (!apiToken) {
       return NextResponse.json(
