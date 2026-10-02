@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, User } from "lucide-react";
 
 const DATABASES = [
   { id: "vk_ok_avatars", label: "Аватары VK и OK" },
@@ -73,7 +72,9 @@ export default function FaceSearchPage() {
         href="/"
         className="absolute top-6 left-6 flex items-center gap-2 px-4 py-2 bg-zinc-900/80 hover:bg-zinc-800 rounded-full border border-zinc-800 text-sm transition-all"
       >
-        <ArrowLeft size={16} />
+        <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+        </svg>
         Домой
       </Link>
 
@@ -105,7 +106,9 @@ export default function FaceSearchPage() {
             ) : (
               <>
                 <div className="w-12 h-12 rounded-full bg-zinc-900 flex items-center justify-center mb-4">
-                  <User size={24} className="text-zinc-400" />
+                  <svg className="w-6 h-6 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
                 </div>
                 <span className="font-semibold text-sm mb-1 text-center">
                   Выбрать фото с лицом
