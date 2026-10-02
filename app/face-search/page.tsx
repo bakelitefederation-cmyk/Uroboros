@@ -1,291 +1,167 @@
 "use client";
-import { useRef, useState } from "react";
+
+import { useState } from "react";
 import Link from "next/link";
-import { FacePicker } from "./face-picker";
-import { FaceResults } from "./results";
-import { SOURCES, type Face, type Limit, type SourceId, type SourceResult } from "./types";
+import { ArrowLeft, User } from "lucide-react";
 
-const MAX_SIDE = 1600;
-const RESULT_OPTIONS = [10, 50, 100, 200, 500];
+const DATABASES = [
+  { id: "vk_ok_avatars", label: "Аватары VK и OK" },
+  { id: "vk_ok_new", label: "Новые аватары VK и OK" },
+  { id: "vk_wall", label: "Фото со стен VK" },
+  { id: "tiktok", label: "Аватары TikTok" },
+  { id: "clubhouse", label: "Аватары Clubhouse" },
+  { id: "sb_photo", label: "База sb_photo" },
+];
 
-type Prepared = { dataUrl: string; base64: string; width: number; height: number };
+export default function FaceSearchPage() {
+  const [selectedBases, setSelectedBases] = useState<string[]>(
+    DATABASES.map((b) => b.id)
+  );
+  const [includePrivate, setIncludePrivate] = useState(true);
+  const [resultsPerBase, setResultsPerBase] = useState(100);
+  const [file, setFile] = useState<File | null>(null);
+  const [loading, setLoading] = useState(false);
 
-async function prepareImage(file: File): Promise<Prepared> {
-  const bitmap = await createImageBitmap(file);
-  const ratio = Math.min(1, MAX_SIDE / Math.max(bitmap.width, bitmap.height));
-  const width = Math.round(bitmap.width * ratio);
-  const height = Math.round(bitmap.height * ratio);
-  const canvas = document.createElement("canvas");
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("canvas");
-  ctx.drawImage(bitmap, 0, 0, width, height);
-  bitmap.close();
-  const dataUrl = canvas.toDataURL("image/jpeg", 0.92);
-  return { dataUrl, base64: dataUrl.split(",")[1], width, height };
-}
+  const toggleBase = (id: string) => {
+    setSelectedBases((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  };
 
-const ERRORS: Record<string, string> = {
-  config_error: "На сервере не задан ключ SEARCH4FACES_API_KEY.",
-  network_error: "search4faces.com недоступен. Попробуйте позже.",
-  invalid_image: "Файл не подходит. Нужен JPEG/PNG до ~8 МБ.",
-};
-
-async function callApi<T>(body: Record<string, unknown>): Promise<T> {
-  const res = await fetch("/api/face-search", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(ERRORS[data.error] ?? data.detail ?? "Ошибка запроса. Попробуйте ещё раз.");
-  return data as T;
-}
-
-export default function FaceSearch() {
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [fileName, setFileName] = useState<string | null>(null);
-  const [image, setImage] = useState<Prepared | null>(null);
-  const [imageId, setImageId] = useState<string | null>(null);
-  const [faces, setFaces] = useState<Face[]>([]);
-  const [scale, setScale] = useState(1);
-  const [selected, setSelected] = useState(0);
-  const [sources, setSources] = useState<SourceId[]>(SOURCES.map((s) => s.id));
-  const [hidden, setHidden] = useState(true);
-  const [perSource, setPerSource] = useState(100);
-  const [results, setResults] = useState<SourceResult[] | null>(null);
-  const [limit, setLimit] = useState<Limit>(null);
-  const [status, setStatus] = useState<"idle" | "detecting" | "searching">("idle");
-  const [error, setError] = useState<string | null>(null);
-  const [dragActive, setDragActive] = useState(false);
-
-  async function handleFile(file: File) {
-    if (!file.type.startsWith("image/")) {
-      setError("Нужен файл изображения.");
-      return;
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      setFile(e.target.files[0]);
     }
-    setFileName(file.name);
-    setError(null);
-    setResults(null);
-    setFaces([]);
-    setImageId(null);
-    setSelected(0);
-    setStatus("detecting");
+  };
+
+  const handleSubmit = async () => {
+    if (!file) return;
+    setLoading(true);
+
+    const formData = new FormData();
+    formData.append("photo", file);
+    formData.append("collections", JSON.stringify(selectedBases));
+    formData.append("limit", resultsPerBase.toString());
+    formData.append("includePrivate", includePrivate.toString());
+
     try {
-      const prepared = await prepareImage(file);
-      setImage(prepared);
-      const data = await callApi<{ imageId: string; faces: Face[]; scale: number }>({
-        action: "detect",
-        image: prepared.base64,
+      const res = await fetch("/api/face-search", {
+        method: "POST",
+        body: formData,
       });
-      if (data.faces.length === 0) {
-        setError("Лица на фото не найдены. Попробуйте более чёткий снимок анфас.");
-        return;
-      }
-      setImageId(data.imageId);
-      setFaces(data.faces);
-      setScale(data.scale || 1);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Не удалось обработать фото.");
+      const data = await res.json();
+      console.log("Результаты Luxand:", data);
+    } catch (err) {
+      console.error(err);
     } finally {
-      setStatus("idle");
+      setLoading(false);
     }
-  }
-
-  async function handleSearch() {
-    if (!imageId || !faces[selected] || sources.length === 0) return;
-    setStatus("searching");
-    setError(null);
-    setResults(null);
-    try {
-      const data = await callApi<{ bySource: SourceResult[]; limit: Limit }>({
-        action: "search",
-        imageId,
-        face: faces[selected],
-        sources,
-        hidden,
-        results: perSource,
-      });
-      setResults(data.bySource);
-      setLimit(data.limit);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Ошибка поиска.");
-    } finally {
-      setStatus("idle");
-    }
-  }
-
-  function toggleSource(id: SourceId) {
-    setSources((prev) => (prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]));
-  }
+  };
 
   return (
-    <main className="min-h-screen text-white flex flex-col items-center px-6 py-20">
+    <div className="min-h-screen bg-[#0a0a0c] text-white flex flex-col items-center justify-center p-6 relative font-sans">
+      {/* Кнопка «Домой» */}
       <Link
         href="/"
-        className="absolute top-6 left-6 flex items-center gap-2 bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/10 rounded-full px-4 py-2 text-sm font-medium transition"
+        className="absolute top-6 left-6 flex items-center gap-2 px-4 py-2 bg-zinc-900/80 hover:bg-zinc-800 rounded-full border border-zinc-800 text-sm transition-all"
       >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
-          <path d="M19 12H5M12 19l-7-7 7-7" />
-        </svg>
+        <ArrowLeft size={16} />
         Домой
       </Link>
 
-      <div className="backdrop-blur-2xl bg-white/[0.07] border border-white/20 rounded-2xl p-8 w-full max-w-4xl shadow-[0_0_40px_rgba(0,0,0,0.5)]">
-        <h1 className="text-2xl font-bold mb-1 text-center">Поиск по лицу</h1>
-        <p className="text-sm text-gray-400 text-center mb-6">
-          {"Через search4faces: VK, OK, TikTok, Clubhouse — по всем базам одновременно"}
+      {/* Модальное окно поиска */}
+      <div className="w-full max-w-4xl bg-zinc-900/90 border border-zinc-800/80 rounded-2xl p-8 backdrop-blur-md shadow-2xl">
+        <h1 className="text-2xl font-bold text-center mb-1">Поиск по лицу</h1>
+        <p className="text-zinc-400 text-xs text-center mb-8">
+          Через Luxand Cloud: VK, OK, TikTok, Clubhouse — по всем базам одновременно
         </p>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          {/* Область загрузки файла */}
+          <label className="border-2 border-dashed border-zinc-800 hover:border-zinc-700 rounded-xl flex flex-col items-center justify-center p-8 cursor-pointer transition-all min-h-[300px] bg-zinc-950/40">
             <input
-              ref={inputRef}
               type="file"
               accept="image/*"
               className="hidden"
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) handleFile(f);
-                e.target.value = "";
-              }}
+              onChange={handleFileChange}
             />
-            {image && faces.length > 0 ? (
-              <div className="space-y-3">
-                <FacePicker
-                  src={image.dataUrl}
-                  width={image.width}
-                  height={image.height}
-                  faces={faces}
-                  scale={scale}
-                  selected={selected}
-                  onSelect={setSelected}
-                />
-                <button
-                  type="button"
-                  onClick={() => inputRef.current?.click()}
-                  className="w-full text-sm text-gray-300 hover:text-white transition"
-                >
-                  Выбрать другое фото
-                </button>
-              </div>
-            ) : (
-              <div
-                role="button"
-                tabIndex={0}
-                onClick={() => inputRef.current?.click()}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") inputRef.current?.click();
-                }}
-                onDragOver={(e) => {
-                  e.preventDefault();
-                  setDragActive(true);
-                }}
-                onDragLeave={() => setDragActive(false)}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  setDragActive(false);
-                  const f = e.dataTransfer.files?.[0];
-                  if (f) handleFile(f);
-                }}
-                className={
-                  "cursor-pointer h-full min-h-56 rounded-xl border-2 border-dashed transition flex flex-col items-center justify-center text-center py-10 px-6 " +
-                  (dragActive ? "border-white/60 bg-white/5" : "border-white/20 hover:border-white/40")
-                }
-              >
-                {image ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={image.dataUrl} alt="Загруженное фото" className="max-h-40 rounded-lg mb-3" />
-                ) : (
-                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mb-3 text-gray-400" aria-hidden>
-                    <circle cx="12" cy="9" r="4" />
-                    <path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6" />
-                  </svg>
-                )}
-                <p className="font-bold">
-                  {status === "detecting" ? "Ищу лица на фото..." : fileName ?? "Выбрать фото с лицом"}
-                </p>
-                {!fileName && <p className="text-sm text-gray-400 mt-1">или перетащите сюда</p>}
-              </div>
-            )}
-          </div>
+            <div className="w-12 h-12 rounded-full bg-zinc-900 flex items-center justify-center mb-4">
+              <User size={24} className="text-zinc-400" />
+            </div>
+            <span className="font-semibold text-sm mb-1 text-center">
+              {file ? file.name : "Выбрать фото с лицом"}
+            </span>
+            <span className="text-xs text-zinc-500">или перетащите сюда</span>
+          </label>
 
-          <div className="space-y-5">
-            <fieldset>
-              <legend className="text-sm font-semibold mb-2">Базы поиска</legend>
-              <div className="space-y-1.5">
-                {SOURCES.map((s) => (
-                  <label key={s.id} className="flex items-center gap-2.5 text-sm cursor-pointer">
+          {/* Правая колонка с параметрами */}
+          <div className="flex flex-col justify-between">
+            <div className="space-y-4">
+              <span className="text-xs font-semibold text-zinc-300 block">
+                Базы поиска
+              </span>
+
+              <div className="space-y-2.5">
+                {DATABASES.map((base) => (
+                  <label
+                    key={base.id}
+                    className="flex items-center gap-3 cursor-pointer text-xs text-zinc-300 hover:text-white transition-colors"
+                  >
                     <input
                       type="checkbox"
-                      checked={sources.includes(s.id)}
-                      onChange={() => toggleSource(s.id)}
-                      className="accent-white size-4"
+                      checked={selectedBases.includes(base.id)}
+                      onChange={() => toggleBase(base.id)}
+                      className="w-4 h-4 rounded bg-zinc-800 border-zinc-700 checked:bg-white text-black focus:ring-0 cursor-pointer"
                     />
-                    <span>{s.label}</span>
+                    {base.label}
                   </label>
                 ))}
               </div>
-            </fieldset>
 
-            <label className="flex items-center gap-2.5 text-sm cursor-pointer">
-              <input
-                type="checkbox"
-                checked={hidden}
-                onChange={(e) => setHidden(e.target.checked)}
-                className="accent-white size-4"
-              />
-              <span>Включать скрытые и закрытые профили</span>
-            </label>
+              <div className="pt-3 border-t border-zinc-800/80 space-y-3">
+                <label className="flex items-center gap-3 cursor-pointer text-xs text-zinc-300 hover:text-white">
+                  <input
+                    type="checkbox"
+                    checked={includePrivate}
+                    onChange={(e) => setIncludePrivate(e.target.checked)}
+                    className="w-4 h-4 rounded bg-zinc-800 border-zinc-700 checked:bg-white text-black focus:ring-0 cursor-pointer"
+                  />
+                  Включать скрытые и закрытые профили
+                </label>
 
-            <label className="flex items-center justify-between gap-3 text-sm">
-              <span>Результатов на базу</span>
-              <select
-                value={perSource}
-                onChange={(e) => setPerSource(Number(e.target.value))}
-                className="bg-white/5 border border-white/20 rounded-lg px-3 py-1.5 outline-none focus:border-white/50"
+                <div className="flex items-center justify-between pt-1">
+                  <span className="text-xs text-zinc-300">
+                    Результатов на базу
+                  </span>
+                  <select
+                    value={resultsPerBase}
+                    onChange={(e) => setResultsPerBase(Number(e.target.value))}
+                    className="bg-zinc-800 border border-zinc-700 text-xs text-white rounded-lg px-3 py-1.5 focus:outline-none"
+                  >
+                    <option value={50}>50</option>
+                    <option value={100}>100</option>
+                    <option value={200}>200</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* Кнопка поиска */}
+            <div className="mt-6">
+              <button
+                onClick={handleSubmit}
+                disabled={!file || loading}
+                className="w-full py-2.5 bg-zinc-500 hover:bg-zinc-400 disabled:opacity-50 text-black font-medium text-sm rounded-lg transition-all"
               >
-                {RESULT_OPTIONS.map((n) => (
-                  <option key={n} value={n} className="bg-black">
-                    {n}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <button
-              type="button"
-              onClick={handleSearch}
-              disabled={!imageId || sources.length === 0 || status !== "idle"}
-              className="w-full bg-white text-black rounded-lg px-5 py-2.5 font-medium disabled:opacity-40 hover:bg-gray-200 active:bg-gray-300 transition"
-            >
-              {status === "searching"
-                ? `Ищу по ${sources.length} базам...`
-                : faces.length > 1
-                  ? `Искать лицо №${selected + 1}`
-                  : "Найти профили"}
-            </button>
-
-            {limit && (
-              <p className="text-xs text-gray-400">
-                {`Осталось запросов: ${limit.remaining} из ${limit.limit} · до ${limit.speed}/мин · ключ до ${limit.enddate}`}
+                {loading ? "Поиск..." : "Найти профили"}
+              </button>
+              <p className="text-[10px] text-zinc-500 text-center mt-3">
+                Каждая база — отдельный запрос к API. Фото отправляется в Luxand Cloud для распознавания.
               </p>
-            )}
-            <p className="text-xs text-gray-500">
-              {"Каждая база — отдельный запрос к API. Фото отправляется в search4faces для распознавания."}
-            </p>
+            </div>
           </div>
         </div>
-
-        {error && (
-          <div className="mt-6 rounded-lg px-4 py-3 bg-red-500/10 border border-red-500/30">
-            <p className="font-bold text-sm">{error}</p>
-          </div>
-        )}
-
-        {results && <FaceResults bySource={results} />}
       </div>
-    </main>
+    </div>
   );
 }
