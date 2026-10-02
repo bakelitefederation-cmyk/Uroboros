@@ -11,7 +11,7 @@ export default function Home() {
     { title: "QR-анализатор", desc: "Проверка QR-кода на скрытую ссылку без перехода", href: "/qr" },
     { title: "Поиск по почте", desc: "Валидность домена, одноразовая почта, Gravatar-профиль", href: "/email" },
     { title: "Обратный поиск фото", desc: "Поиск похожих изображений через Google, Yandex, TinEye, Bing", href: "/reverse-image" },
-    { title: "Поиск по лицу", desc: "Профили VK, OK, TikTok и Clubhouse по фото лица через search4faces", href: "/face-search" },
+    { title: "Поиск по лицу", desc: "Профили VK, OK, TikTok и Clubhouse по фото лица через SERPAPI", href: "/face-search" },
     { title: "Гео-мультипоиск", desc: "Координаты сразу в Google Maps, Earth, Yandex, Wikimapia, SunCalc", href: "/geo" },
     { title: "Wayback Machine", desc: "Архивные снимки страницы: удалённый и изменённый контент", href: "/wayback" },
     { title: "Google Dork генератор", desc: "Готовые продвинутые поисковые запросы по сайту и ключевым словам", href: "/dork" },
