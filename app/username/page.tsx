@@ -20,11 +20,24 @@ export default function UsernameSearch() {
   const [result, setResult] = useState<UsernameResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  function copyResults() {
+    if (!result || result.results.length === 0) return;
+    const text =
+      `Ник: ${result.username}\n` +
+      `Найдено: ${result.foundCount} из ${result.totalChecked}\n\n` +
+      result.results.map((r) => `${r.site}: ${r.url}`).join("\n");
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  }
 
   async function search() {
     setLoading(true);
     setError(null);
     setResult(null);
+    setCopied(false);
 
     try {
       const res = await fetch("/api/username", {
@@ -90,9 +103,19 @@ export default function UsernameSearch() {
 
         {result && (
           <div className="mt-6">
-            <p className="text-xs text-gray-400 mb-3">
-              Найдено {result.foundCount} из {result.totalChecked} проверенных сайтов
-            </p>
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-xs text-gray-400">
+                Найдено {result.foundCount} из {result.totalChecked} проверенных сайтов
+              </p>
+              {result.results.length > 0 && (
+                <button
+                  onClick={copyResults}
+                  className="text-xs bg-white/10 hover:bg-white/20 active:bg-white/30 rounded-lg px-3 py-1.5 transition"
+                >
+                  {copied ? "Скопировано" : "Копировать всё"}
+                </button>
+              )}
+            </div>
 
             {result.results.length === 0 ? (
               <div className="rounded-lg px-4 py-3 bg-white/5 border border-white/10">
