@@ -1,176 +1,83 @@
-// app/api/face-search/route.ts
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from "next/server";
 
-const ENDPOINT = 'https://search4faces.com/api/json-rpc/v1';
-
-const SOURCES = ['vkok_avatar', 'vkokn_avatar', 'vk_wall', 'tt_avatar', 'ch_avatar', 'sb_photo'] as const;
-type Source = (typeof SOURCES)[number];
-
-const FACE_KEYS = [
-  'x', 'y', 'width', 'height',
-  'lm1_x', 'lm1_y', 'lm2_x', 'lm2_y', 'lm3_x', 'lm3_y', 'lm4_x', 'lm4_y', 'lm5_x', 'lm5_y',
-] as const;
-type Face = Record<(typeof FACE_KEYS)[number], number>;
-
-const MAX_BASE64_LENGTH = 11 * 1024 * 1024;
-const MAX_RESULTS = 500;
-
-class RpcError extends Error {
-  constructor(public code: string, message: string) {
-    super(message);
-  }
-}
-
-async function rpc<T>(method: string, params: Record<string, unknown>): Promise<T> {
-  const apiKey = process.env.SEARCH4FACES_API_KEY;
-  if (!apiKey) throw new RpcError('config_error', 'Не задан SEARCH4FACES_API_KEY');
-
-  let res: Response;
+export async function POST(req: NextRequest) {
   try {
-    res = await fetch(ENDPOINT, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-authorization-token': apiKey },
-      body: JSON.stringify({ jsonrpc: '2.0', method, id: crypto.randomUUID(), params }),
-      cache: 'no-store',
-    });
-  } catch {
-    throw new RpcError('network_error', 'search4faces.com недоступен');
-  }
+    const formData = await req.formData();
+    const file = formData.get("photo") as File;
 
-  const data = await res.json().catch(() => null);
-  if (!data) throw new RpcError('bad_response', `Некорректный ответ (HTTP ${res.status})`);
-  if (data.error) {
-    throw new RpcError('api_error', data.error.message ?? JSON.stringify(data.error));
-  }
-  return data.result as T;
-}
-
-function parseFace(raw: unknown): Face | null {
-  if (!raw || typeof raw !== 'object') return null;
-  const face = {} as Face;
-  for (const key of FACE_KEYS) {
-    const value = Number((raw as Record<string, unknown>)[key]);
-    if (!Number.isFinite(value)) return null;
-    face[key] = Math.round(value);
-  }
-  return face;
-}
-
-type RawProfile = Record<string, unknown>;
-
-function normalizeProfile(p: RawProfile, source: Source) {
-  const str = (v: unknown) => (typeof v === 'string' ? v : v == null ? '' : String(v));
-  const num = (v: unknown) => {
-    const n = Number(v);
-    return Number.isFinite(n) && n > 0 ? n : null;
-  };
-  return {
-    score: Number(p.score) || 0,
-    face: str(p.face),
-    profile: str(p.profile),
-    photo: str(p.photo),
-    sourceImage: str(p.source),
-    age: num(p.age),
-    firstName: str(p.first_name),
-    lastName: str(p.last_name),
-    maidenName: str(p.maiden_name),
-    city: str(p.city),
-    country: str(p.country),
-    database: source,
-  };
-}
-
-async function getLimit() {
-  try {
-    const r = await rpc<{ limit: number; remaining: number; enddate: string; speed: number }>('rateLimit', {});
-    return { limit: r.limit, remaining: r.remaining, enddate: r.enddate, speed: r.speed };
-  } catch {
-    return null;
-  }
-}
-
-export async function POST(request: NextRequest) {
-  const body = await request.json().catch(() => null);
-  if (!body || typeof body !== 'object') {
-    return NextResponse.json({ error: 'bad_request' }, { status: 400 });
-  }
-
-  try {
-    if (body.action === 'limit') {
-      return NextResponse.json({ limit: await getLimit() });
+    if (!file) {
+      return NextResponse.json({ error: "Файл не загружен" }, { status: 400 });
     }
 
-    if (body.action === 'detect') {
-      const image = typeof body.image === 'string' ? body.image : '';
-      if (!image || image.length > MAX_BASE64_LENGTH || !/^[A-Za-z0-9+/=]+$/.test(image)) {
-        return NextResponse.json({ error: 'invalid_image' }, { status: 400 });
-      }
-      const result = await rpc<{ image: string; faces: unknown[]; scale?: string | number }>('detectFaces', { image });
-      const faces = (result.faces ?? []).map(parseFace).filter((f): f is Face => f !== null);
-      return NextResponse.json({
-        imageId: result.image,
-        faces,
-        scale: Number(result.scale) || 1,
-      });
-    }
+    const serpApiKey = process.env.SERPAPI_KEY;
+    const imgbbApiKey = process.env.IMGBB_API_KEY;
 
-    if (body.action === 'search') {
-      const imageId = typeof body.imageId === 'string' ? body.imageId : '';
-      const face = parseFace(body.face);
-      if (!imageId || imageId.length > 200 || !face) {
-        return NextResponse.json({ error: 'invalid_params' }, { status: 400 });
-      }
-
-      const requested: unknown[] = Array.isArray(body.sources) ? body.sources : [];
-      const sources = SOURCES.filter((s) => requested.includes(s));
-      if (sources.length === 0) {
-        return NextResponse.json({ error: 'no_sources' }, { status: 400 });
-      }
-
-      const results = Math.min(Math.max(Math.round(Number(body.results) || 50), 1), MAX_RESULTS);
-      const hidden = Boolean(body.hidden);
-
-      const settled = await Promise.allSettled(
-        sources.map((source) =>
-          rpc<{ profiles?: RawProfile[] }>('searchFace', {
-            image: imageId,
-            face,
-            source,
-            hidden,
-            results: String(results),
-            lang: 'ru',
-          }),
-        ),
+    if (!serpApiKey) {
+      return NextResponse.json(
+        { error: "На сервере не задан ключ SERPAPI_KEY." },
+        { status: 500 }
       );
-
-      const bySource = sources.map((source, i) => {
-        const r = settled[i];
-        if (r.status === 'fulfilled') {
-          return {
-            source,
-            ok: true as const,
-            profiles: (r.value.profiles ?? []).map((p) => normalizeProfile(p, source)),
-          };
-        }
-        return {
-          source,
-          ok: false as const,
-          error: r.reason instanceof Error ? r.reason.message : 'unknown_error',
-          profiles: [],
-        };
-      });
-
-      return NextResponse.json({ bySource, limit: await getLimit() });
     }
 
-    return NextResponse.json({ error: 'unknown_action' }, { status: 400 });
-  } catch (err) {
-    const code = err instanceof RpcError ? err.code : 'unknown_error';
-    const message = err instanceof Error ? err.message : 'unknown_error';
-    console.error('face-search failed:', code, message);
+    if (!imgbbApiKey) {
+      return NextResponse.json(
+        { error: "На сервере не задан ключ IMGBB_API_KEY." },
+        { status: 500 }
+      );
+    }
+
+    // 1. Загружаем фото на ImgBB, чтобы получить публичную ссылку для Google Lens
+    const imgbbFormData = new FormData();
+    imgbbFormData.append("image", file);
+
+    const imgbbRes = await fetch(
+      `https://api.imgbb.com/1/upload?key=${imgbbApiKey}`,
+      {
+        method: "POST",
+        body: imgbbFormData,
+      }
+    );
+
+    const imgbbData = await imgbbRes.json();
+
+    if (!imgbbData.success || !imgbbData.data?.url) {
+      return NextResponse.json(
+        { error: "Ошибка при временной загрузке изображения." },
+        { status: 500 }
+      );
+    }
+
+    const imageUrl = imgbbData.data.url;
+
+    // 2. Отправляем ссылку в SerpApi (Google Lens API)
+    const serpUrl = `https://serpapi.com/search.json?engine=google_lens&url=${encodeURIComponent(
+      imageUrl
+    )}&api_key=${serpApiKey}`;
+
+    const serpRes = await fetch(serpUrl);
+    const serpData = await serpRes.json();
+
+    if (serpData.error) {
+      return NextResponse.json(
+        { error: `SerpApi Error: ${serpData.error}` },
+        { status: 500 }
+      );
+    }
+
+    // 3. Форматируем найденные совпадения
+    const matches = serpData.visual_matches || [];
+    const formattedResults = matches.map((item: any) => ({
+      name: item.title || item.source || "Ссылка",
+      url: item.thumbnail || item.images?.[0]?.thumbnail,
+      link: item.link,
+      source: item.source,
+    }));
+
+    return NextResponse.json({ results: formattedResults });
+  } catch (error: any) {
     return NextResponse.json(
-      { error: code, detail: message },
-      { status: code === 'config_error' ? 500 : 502 },
+      { error: error.message || "Ошибка сервера" },
+      { status: 500 }
     );
   }
 }
