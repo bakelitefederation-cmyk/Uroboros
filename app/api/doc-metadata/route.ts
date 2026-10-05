@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import JSZip from 'jszip';
 import { XMLParser } from 'fast-xml-parser';
-import pdfParse from 'pdf-parse';
+import { PDFParse } from 'pdf-parse';
 
 interface DocMetadata {
   fileInfo: {
@@ -15,19 +15,25 @@ interface DocMetadata {
 }
 
 async function extractPdfMetadata(buffer: Buffer): Promise<Record<string, any>> {
-  const data = await pdfParse(buffer);
-  const info = data.info ?? {};
-  return {
-    Title: info.Title,
-    Author: info.Author,
-    Subject: info.Subject,
-    Keywords: info.Keywords,
-    Creator: info.Creator,
-    Producer: info.Producer,
-    CreationDate: info.CreationDate,
-    ModDate: info.ModDate,
-    PageCount: data.numpages,
-  };
+  const parser = new PDFParse({ data: buffer });
+  try {
+    const result = await parser.getInfo();
+    const info = result.info ?? {};
+    const dates = result.getDateNode?.() ?? {};
+    return {
+      Title: info.Title,
+      Author: info.Author,
+      Subject: info.Subject,
+      Keywords: info.Keywords,
+      Creator: info.Creator,
+      Producer: info.Producer,
+      CreationDate: dates.CreationDate ?? info.CreationDate,
+      ModDate: dates.ModDate ?? info.ModDate,
+      PageCount: result.total,
+    };
+  } finally {
+    await parser.destroy();
+  }
 }
 
 async function extractOfficeMetadata(
