@@ -86,7 +86,7 @@ export default function FaceSearchPage() {
       <div className="w-full max-w-4xl bg-zinc-900/90 border border-zinc-800/80 rounded-2xl p-8 backdrop-blur-md shadow-2xl">
         <h1 className="text-2xl font-bold text-center mb-1">Поиск по лицу</h1>
         <p className="text-zinc-400 text-xs text-center mb-8">
-          Через Luxand Cloud: VK, OK, TikTok, Clubhouse — по всем базам одновременно
+          Через SERPAPI: VK, OK, TikTok, Clubhouse — по всем базам одновременно
         </p>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">

@@ -15,7 +15,7 @@ export default function Home() {
     { title: "Wayback Machine", desc: "Архивные снимки страницы: удалённый и изменённый контент", href: "/wayback" },
     { title: "Google Dork генератор", desc: "Готовые продвинутые поисковые запросы по сайту и ключевым словам", href: "/dork" },
     { title: "Отслеживание самолётов", desc: "Позиция, высота и скорость борта в воздухе по позывному", href: "/aircraft" },
-    { title: "Шаблон досье", desc: "Структурированный отчёт: источники, хронология, находки, вывод", href: "/dossier" },
+    { title: "Поиск по лицу", desc: "Поиск профилей по открытым источникам через SERPAPI", href: "/face-search" },
     { title: "Проверка ссылки", desc: "Сканирование URL через VirusTotal, 70+ антивирусных движков", href: "/virustotal" },
     { title: "Метаданные документа", desc: "Автор, даты создания и изменения PDF, DOCX, PPTX, XLSX", href: "/doc-metadata" },
   ];
