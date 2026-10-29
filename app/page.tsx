@@ -15,23 +15,24 @@ export default function Home() {
     { title: "Wayback Machine", desc: "Архивные снимки страницы: удалённый и изменённый контент", href: "/wayback" },
     { title: "Google Dork генератор", desc: "Готовые продвинутые поисковые запросы по сайту и ключевым словам", href: "/dork" },
     { title: "Отслеживание самолётов", desc: "Позиция, высота и скорость борта в воздухе по позывному", href: "/aircraft" },
-    { title: "Поиск по лицу", desc: "Поиск профилей по открытым источникам через SERPAPI", href: "/face-search" },
+    { title: "Шаблон досье", desc: "Структурированный отчёт: источники, хронология, находки, вывод", href: "/dossier" },
     { title: "Проверка ссылки", desc: "Сканирование URL через VirusTotal, 70+ антивирусных движков", href: "/virustotal" },
     { title: "Метаданные документа", desc: "Автор, даты создания и изменения PDF, DOCX, PPTX, XLSX", href: "/doc-metadata" },
+    { title: "ИИ-ассистент", desc: "Сам выбирает модули Uroboros и собирает ответ", href: "/agent" },
   ];
 
   return (
     <main className="min-h-screen bg-black/70 text-white flex flex-col items-center justify-center px-6 py-16">
-      <Image src="/logo.webp" alt="Uroboros logo" width={120} height={120} className="mb-4 invert" />
+      <Image src="/logo.webp" alt="Uroboros logo" width={120} height={120} className="mb-4 invert" priority />
       <h1 className="text-5xl font-bold mb-2 tracking-tight">Uroboros</h1>
       <p className="text-gray-400 mb-12">Легальный OSINT-инструмент</p>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 w-full max-w-4xl">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 w-full max-w-6xl">
         {modules.map((m) => (
           <Link
             key={m.href}
             href={m.href}
-            className="border border-gray-700 rounded-xl p-6 hover:border-gray-400 transition"
+            className="border border-gray-700 rounded-xl p-6 hover:border-gray-400 active:border-gray-300 transition"
           >
             <h2 className="text-xl font-semibold mb-2">{m.title}</h2>
             <p className="text-gray-400 text-sm">{m.desc}</p>
