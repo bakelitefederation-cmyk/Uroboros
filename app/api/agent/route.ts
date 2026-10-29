@@ -255,6 +255,7 @@ async function callModel(messages: ChatMessage[], allowTools: boolean) {
 async function callModelOnce(messages: ChatMessage[], allowTools: boolean) {
   const base = (process.env.AI_BASE_URL ?? '').replace(/\/$/, '');
   const res = await fetch(`${base}/chat/completions`, {
+    signal: AbortSignal.timeout(20_000), // не ждём модель дольше 20 секунд
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -374,6 +375,12 @@ export async function POST(request: NextRequest) {
           ? 'Модель сейчас перегружена на стороне провайдера. Попробуйте через минуту.'
           : `Ошибка модели (${err.status})`;
       return NextResponse.json({ error: 'model_error', detail }, { status: 502 });
+    }
+    if (err instanceof Error && (err.name === 'TimeoutError' || err.name === 'AbortError')) {
+      return NextResponse.json(
+        { error: 'model_timeout', detail: 'Модель отвечает слишком долго. Попробуйте ещё раз или смените модель.' },
+        { status: 504 },
+      );
     }
     console.error('agent error:', err);
     return NextResponse.json({ error: 'agent_error', detail: 'Внутренняя ошибка агента' }, { status: 500 });
