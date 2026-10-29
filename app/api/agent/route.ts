@@ -232,7 +232,27 @@ function parseArgs(raw: string): Record<string, any> {
 
 // ---------- Вызов модели (OpenAI-совместимый API) ----------
 
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// повторяем при временных сбоях провайдера (500/502/503/504); на 429 не повторяем, это лимит
 async function callModel(messages: ChatMessage[], allowTools: boolean) {
+  const retryable = [500, 502, 503, 504];
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await callModelOnce(messages, allowTools);
+    } catch (err) {
+      if (err instanceof ModelError && retryable.includes(err.status) && attempt < 2) {
+        await sleep(1000 * (attempt + 1));
+        continue;
+      }
+      throw err;
+    }
+  }
+}
+
+async function callModelOnce(messages: ChatMessage[], allowTools: boolean) {
   const base = (process.env.AI_BASE_URL ?? '').replace(/\/$/, '');
   const res = await fetch(`${base}/chat/completions`, {
     method: 'POST',
@@ -350,6 +370,8 @@ export async function POST(request: NextRequest) {
       const detail =
         err.status === 429
           ? 'Достигнут лимит бесплатного тарифа модели. Попробуйте позже.'
+          : err.status === 503
+          ? 'Модель сейчас перегружена на стороне провайдера. Попробуйте через минуту.'
           : `Ошибка модели (${err.status})`;
       return NextResponse.json({ error: 'model_error', detail }, { status: 502 });
     }
