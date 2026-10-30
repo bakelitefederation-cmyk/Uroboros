@@ -22,6 +22,72 @@ function mapsUrl(lat: number | null, lon: number | null) {
   return lat != null && lon != null ? `https://www.google.com/maps?q=${lat},${lon}` : '';
 }
 
+function mapAdsb(a: any): AircraftState {
+  const onGround = a.alt_baro === 'ground';
+  const lat = typeof a.lat === 'number' ? a.lat : null;
+  const lon = typeof a.lon === 'number' ? a.lon : null;
+  return {
+    icao24: a.hex ?? '',
+    callsign: (a.flight ?? '').trim(),
+    originCountry: a.r ? `рег. ${a.r}${a.t ? ` (${a.t})` : ''}` : (a.t ?? '—'),
+    longitude: lon,
+    latitude: lat,
+    altitude: typeof a.alt_baro === 'number' ? Math.round(a.alt_baro * FT_TO_M) : null,
+    velocity: typeof a.gs === 'number' ? Math.round(a.gs * KT_TO_MS) : null,
+    heading: typeof a.track === 'number' ? a.track : null,
+    onGround,
+    lastContact: Math.floor(Date.now() / 1000) - Math.round(a.seen ?? 0),
+    mapsUrl: mapsUrl(lat, lon),
+  };
+}
+
+// Борты в радиусе 250 морских миль от точки (для поиска по префиксу и примеров)
+const HUBS = [
+  [50.03, 8.57], // Франкфурт
+  [51.47, -0.45], // Лондон
+  [41.26, 28.74], // Стамбул
+  [25.25, 55.36], // Дубай
+  [40.64, -73.78], // Нью-Йорк
+];
+
+async function nearby(lat: number, lon: number): Promise<any[]> {
+  const bases = ['https://api.adsb.lol', 'https://api.airplanes.live'];
+  for (const base of bases) {
+    try {
+      const res = await fetch(`${base}/v2/point/${lat}/${lon}/250`, {
+        signal: AbortSignal.timeout(7000),
+        headers: { 'User-Agent': 'Uroboros-OSINT/1.0' },
+        cache: 'no-store',
+      });
+      if (!res.ok) continue;
+      const data = await res.json();
+      return data?.ac ?? [];
+    } catch (e) {
+      console.error('nearby failed:', base, e);
+    }
+  }
+  return [];
+}
+
+async function byPrefix(query: string): Promise<AircraftState[]> {
+  const all = (await Promise.all(HUBS.map(([la, lo]) => nearby(la, lo)))).flat();
+  const seen = new Set<string>();
+  return all
+    .filter((a) => (a.flight ?? '').trim().toUpperCase().startsWith(query))
+    .filter((a) => (seen.has(a.hex) ? false : (seen.add(a.hex), true)))
+    .slice(0, 10)
+    .map(mapAdsb);
+}
+
+// GET /api/aircraft — реальные позывные, которые сейчас в воздухе (для проверки модуля)
+export async function GET() {
+  const ac = await nearby(HUBS[0][0], HUBS[0][1]);
+  const callsigns = Array.from(
+    new Set(ac.map((a) => (a.flight ?? '').trim()).filter((c) => c.length >= 3)),
+  ).slice(0, 15);
+  return NextResponse.json({ callsigns });
+}
+
 // --- Источник 1: adsb.lol / airplanes.live (поиск по позывному, без ключа) ---
 async function fromAdsb(query: string): Promise<AircraftState[]> {
   const urls = [
@@ -40,24 +106,7 @@ async function fromAdsb(query: string): Promise<AircraftState[]> {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       const list: any[] = data?.ac ?? [];
-      return list.slice(0, 10).map((a) => {
-        const onGround = a.alt_baro === 'ground';
-        const lat = typeof a.lat === 'number' ? a.lat : null;
-        const lon = typeof a.lon === 'number' ? a.lon : null;
-        return {
-          icao24: a.hex ?? '',
-          callsign: (a.flight ?? '').trim(),
-          originCountry: a.r ? `рег. ${a.r}${a.t ? ` (${a.t})` : ''}` : (a.t ?? '—'),
-          longitude: lon,
-          latitude: lat,
-          altitude: typeof a.alt_baro === 'number' ? Math.round(a.alt_baro * FT_TO_M) : null,
-          velocity: typeof a.gs === 'number' ? Math.round(a.gs * KT_TO_MS) : null,
-          heading: typeof a.track === 'number' ? a.track : null,
-          onGround,
-          lastContact: Math.floor(Date.now() / 1000) - Math.round(a.seen ?? 0),
-          mapsUrl: mapsUrl(lat, lon),
-        };
-      });
+      return list.slice(0, 10).map(mapAdsb);
     } catch (e) {
       lastErr = e;
       console.error('adsb source failed:', url, e);
@@ -117,6 +166,13 @@ export async function POST(request: NextRequest) {
   try {
     aircraft = await fromAdsb(query);
     source = 'adsb.lol / airplanes.live';
+    if (aircraft.length === 0) {
+      const partial = await byPrefix(query);
+      if (partial.length > 0) {
+        aircraft = partial;
+        source += ' (поиск по началу позывного в зоне Европы, Ближнего Востока и США)';
+      }
+    }
   } catch {
     try {
       aircraft = await fromOpenSky(query);
