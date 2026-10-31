@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { Unbounded, Golos_Text } from "next/font/google";
@@ -30,6 +30,7 @@ const I = {
   dns: "M4 6h16M4 12h16M4 18h16M7 6v.01M7 12v.01M7 18v.01",
   tree: "M12 3v6M12 9H6v6M12 9h6v6M6 15v5M18 15v5",
   cert: "M4 4h16v12H4zM8 20l4-3 4 3V16M8 9h8M8 12h5",
+  graph: "M5 5h.01M19 8h.01M12 19h.01M5 5l7 14M19 8l-7 11M5 5l14 3",
   spark: "M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8zM19 16l.8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8z",
 };
 
@@ -86,6 +87,7 @@ const GROUPS: Group[] = [
     name: "Работа с находками",
     hint: "Собрать результаты в одно целое",
     items: [
+      { title: "Дело", desc: "Находки, граф связей и история проверок", href: "/case", icon: I.graph },
       { title: "Шаблон досье", desc: "Источники, хронология, находки, вывод", href: "/dossier", icon: I.doc },
     ],
   },
@@ -140,6 +142,27 @@ function Ring() {
 
 export default function Home() {
   const [q, setQ] = useState("");
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [installEvent, setInstallEvent] = useState<any>(null);
+
+  useEffect(() => {
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/sw.js").catch(() => {});
+    }
+    const onPrompt = (e: Event) => {
+      e.preventDefault();
+      setInstallEvent(e);
+    };
+    window.addEventListener("beforeinstallprompt", onPrompt);
+    return () => window.removeEventListener("beforeinstallprompt", onPrompt);
+  }, []);
+
+  async function install() {
+    if (!installEvent) return;
+    installEvent.prompt();
+    await installEvent.userChoice.catch(() => {});
+    setInstallEvent(null);
+  }
   const query = q.trim().toLowerCase();
 
   const match = (m: Mod) => !query || (m.title + " " + m.desc).toLowerCase().includes(query);
@@ -167,6 +190,14 @@ export default function Home() {
               Открытые источники в одном месте. Проверяйте факты сами, без регистрации и платных подписок.
             </p>
             <p className="mt-3 text-sm text-gray-500">Только легальные и публичные данные. {total} модулей.</p>
+            {installEvent && (
+              <button
+                onClick={install}
+                className="mt-5 rounded-full border border-[#D4B16A]/50 px-5 py-2 text-sm font-medium text-[#D4B16A] hover:bg-[#D4B16A]/10 transition-colors"
+              >
+                Установить как приложение
+              </button>
+            )}
           </div>
           <Ring />
         </header>

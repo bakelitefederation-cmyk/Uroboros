@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import ModuleShell from "./ModuleShell";
 import { normalizeDomain } from "../lib/domain";
+import { addToCase, extractGraph, recordHistory } from "../lib/case";
 
 const TOOLS = [
   { id: "rdap", href: "/rdap", label: "Регистрация домена" },
@@ -34,6 +35,13 @@ export default function DomainTool({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const started = useRef(false);
+  const [added, setAdded] = useState<string | null>(null);
+
+  function addCase() {
+    const g = extractGraph(current, data, domain);
+    const n = addToCase(g.nodes, g.edges);
+    setAdded(n > 0 ? `Добавлено объектов: ${n}` : "Всё это уже в деле");
+  }
 
   async function run(value: string) {
     const d = normalizeDomain(value, keepWww);
@@ -44,6 +52,7 @@ export default function DomainTool({
     setLoading(true);
     setError(null);
     setData(null);
+    setAdded(null);
     setDomain(d);
     setInput(d);
     try {
@@ -58,6 +67,7 @@ export default function DomainTool({
         return;
       }
       setData(json);
+      recordHistory(current, d);
     } catch {
       setError("Ошибка запроса. Попробуйте ещё раз.");
     } finally {
@@ -107,6 +117,23 @@ export default function DomainTool({
       )}
 
       {data && <div className="mt-6">{render(data, domain)}</div>}
+
+      {data && (
+        <div className="mt-5 flex flex-wrap items-center gap-3">
+          <button
+            onClick={addCase}
+            className="rounded-lg border border-[#D4B16A]/50 bg-[#D4B16A]/10 px-4 py-2 text-sm font-medium text-[#D4B16A] hover:bg-[#D4B16A]/20 transition-colors"
+          >
+            Добавить в дело
+          </button>
+          {added && (
+            <span className="text-sm text-gray-300">
+              {added}.{" "}
+              <Link href="/case" className="underline hover:text-[#D4B16A]">Открыть дело</Link>
+            </span>
+          )}
+        </div>
+      )}
 
       {data && (
         <div className="mt-8 border-t border-white/10 pt-5">
