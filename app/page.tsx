@@ -39,6 +39,8 @@ const GROUPS: Group[] = [
     name: "Люди и аккаунты",
     hint: "Проверка собственных данных и публичных следов",
     items: [
+      
+      { title: "Поиск по лицу", desc: "Через SERPAPI: VK, OK, TikTok, Clubhouse — по всем базам одновременно", href: "/face-search", icon: I.user },
       { title: "Поиск по нику", desc: "На каких из 400 сайтов занят никнейм", href: "/username", icon: I.user },
       { title: "Поиск по почте", desc: "Домен, одноразовая почта, Gravatar", href: "/email", icon: I.mail },
       { title: "Проверка номера", desc: "Формат, страна и оператор", href: "/phone", icon: I.phone },
