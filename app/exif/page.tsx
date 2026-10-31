@@ -1,6 +1,6 @@
 "use client";
 import { useState, useRef } from "react";
-import Link from "next/link";
+import ModuleShell from "../components/ModuleShell";
 
 type ExifReport = {
   fileInfo: {
@@ -112,19 +112,7 @@ export default function ExifAnalyzer() {
       Object.keys(report.xmp).length > 0);
 
   return (
-    <main className="min-h-screen text-white flex flex-col items-center px-6 py-16">
-      <Link
-        href="/"
-        className="fixed top-6 left-6 flex items-center gap-2 bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/10 rounded-full px-4 py-2 text-sm font-medium transition"
-      >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M19 12H5M12 19l-7-7 7-7" />
-        </svg>
-        Домой
-      </Link>
-
-      <div className="backdrop-blur-2xl bg-white/[0.07] border border-white/20 rounded-2xl p-8 w-full max-w-xl shadow-[0_0_40px_rgba(0,0,0,0.5)]">
-        <h1 className="text-2xl font-bold mb-6 text-center">EXIF фото</h1>
+    <ModuleShell title={"EXIF фото"} width="xl">
 
         <input ref={inputRef} type="file" accept="image/*" onChange={handleFileChange} className="hidden" />
 
@@ -157,7 +145,7 @@ export default function ExifAnalyzer() {
         <button
           onClick={analyze}
           disabled={!file || loading}
-          className="mt-4 w-full bg-white text-black rounded-lg px-5 py-2.5 font-medium disabled:opacity-40 hover:bg-gray-200 active:bg-gray-300 transition"
+          className="mt-4 w-full bg-[#D4B16A] text-black rounded-lg px-5 py-2.5 font-medium disabled:opacity-40 hover:bg-[#E2C98F] active:bg-[#C9A45C] transition"
         >
           {loading ? "Анализирую..." : "Показать метаданные"}
         </button>
@@ -221,13 +209,12 @@ export default function ExifAnalyzer() {
             </button>
 
             {showRaw && (
-              <pre className="bg-black/40 border border-white/10 rounded-lg p-4 text-xs whitespace-pre-wrap max-h-80 overflow-y-auto">
+              <pre className="bg-black/40 border border-white/15 rounded-lg p-4 text-xs whitespace-pre-wrap max-h-80 overflow-y-auto">
                 {JSON.stringify(report.raw, null, 2)}
               </pre>
             )}
           </div>
         )}
-      </div>
-    </main>
+      </ModuleShell>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
-import Link from "next/link";
+import ModuleShell from "../components/ModuleShell";
 
 type Message = {
   role: "user" | "assistant";
@@ -73,22 +73,7 @@ export default function AgentChat() {
   }
 
   return (
-    <main className="min-h-screen text-white flex flex-col items-center px-4 sm:px-6 py-16">
-      <Link
-        href="/"
-        className="fixed top-6 left-6 z-10 flex items-center gap-2 bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/10 rounded-full px-4 py-2 text-sm font-medium transition"
-      >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M19 12H5M12 19l-7-7 7-7" />
-        </svg>
-        Домой
-      </Link>
-
-      <div className="backdrop-blur-2xl bg-white/[0.07] border border-white/20 rounded-2xl p-5 sm:p-8 w-full max-w-2xl shadow-[0_0_40px_rgba(0,0,0,0.5)] flex flex-col">
-        <h1 className="text-2xl font-bold mb-1 text-center">ИИ-ассистент</h1>
-        <p className="text-xs text-gray-400 text-center mb-6">
-          Использует модули Uroboros: IP, Wayback, проверка ссылок, самолёты, карты, dorks
-        </p>
+    <ModuleShell title={"ИИ-ассистент"} subtitle={"Использует модули Uroboros: IP, Wayback, проверка ссылок, самолёты, карты, dorks"} width="2xl">
 
         <div className="space-y-3 max-h-[55vh] overflow-y-auto pr-1">
           {messages.length === 0 && (
@@ -106,7 +91,7 @@ export default function AgentChat() {
                 className={
                   "max-w-[90%] rounded-lg px-4 py-3 text-sm whitespace-pre-wrap break-words " +
                   (m.role === "user"
-                    ? "bg-white text-black"
+                    ? "bg-[#D4B16A] text-black"
                     : "bg-black/40 border border-white/10")
                 }
               >
@@ -145,12 +130,12 @@ export default function AgentChat() {
             rows={2}
             maxLength={1000}
             placeholder="Задайте вопрос..."
-            className="flex-1 min-w-0 bg-black/40 border border-white/10 rounded-lg px-4 py-2.5 outline-none focus:border-white/30 transition text-sm resize-none"
+            className="flex-1 min-w-0 bg-black/40 border border-white/15 rounded-lg px-4 py-2.5 outline-none focus:border-[#D4B16A]/70 transition text-sm resize-none"
           />
           <button
             onClick={send}
             disabled={loading || !input.trim()}
-            className="w-full sm:w-auto bg-white text-black rounded-lg px-5 py-2.5 font-medium disabled:opacity-40 hover:bg-gray-200 active:bg-gray-300 transition"
+            className="w-full sm:w-auto bg-[#D4B16A] text-black rounded-lg px-5 py-2.5 font-medium disabled:opacity-40 hover:bg-[#E2C98F] active:bg-[#C9A45C] transition"
           >
             {loading ? "..." : "Отправить"}
           </button>
@@ -159,7 +144,6 @@ export default function AgentChat() {
         <p className="text-xs text-gray-500 mt-3 text-center">
           Тексты диалога отправляются стороннему ИИ-провайдеру. Не вводите конфиденциальные данные.
         </p>
-      </div>
-    </main>
+      </ModuleShell>
   );
 }

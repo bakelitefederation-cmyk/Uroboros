@@ -1,86 +1,113 @@
 "use client";
 import { useState } from "react";
-import Link from "next/link";
+import ModuleShell from "../components/ModuleShell";
+
+type Result = { count: number } | null;
+
+// SHA-1 в браузере: пароль никуда не отправляется целиком
+async function sha1Hex(text: string): Promise<string> {
+  const buf = await crypto.subtle.digest("SHA-1", new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(buf))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("")
+    .toUpperCase();
+}
 
 export default function PasswordCheck() {
   const [password, setPassword] = useState("");
-  const [result, setResult] = useState<{ found: boolean; count: number } | null>(null);
+  const [show, setShow] = useState(false);
+  const [result, setResult] = useState<Result>(null);
   const [loading, setLoading] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  async function checkPassword() {
+  async function check() {
+    if (!password || loading) return;
     setLoading(true);
+    setError(null);
     setResult(null);
-    const res = await fetch("/api/password", {
-      method: "POST",
-      body: JSON.stringify({ password }),
-    });
-    const data = await res.json();
-    setResult(data);
-    setLoading(false);
-  }
-
-  function copyResult() {
-    if (!result) return;
-    const text = result.found
-      ? "Найден в утечках: " + result.count.toLocaleString() + " раз"
-      : "Не найден в известных утечках";
-    navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
+    try {
+      const hash = await sha1Hex(password);
+      const prefix = hash.slice(0, 5);
+      const suffix = hash.slice(5);
+      // Серверу уходят только первые 5 символов хеша
+      const res = await fetch(`https://api.pwnedpasswords.com/range/${prefix}`, {
+        headers: { "Add-Padding": "true" },
+      });
+      if (!res.ok) throw new Error("bad status");
+      const text = await res.text();
+      let count = 0;
+      for (const line of text.split("\n")) {
+        const [h, c] = line.trim().split(":");
+        if (h === suffix) {
+          count = parseInt(c, 10) || 0;
+          break;
+        }
+      }
+      setResult({ count });
+    } catch {
+      setError("Не удалось связаться с базой утечек. Попробуйте ещё раз.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
-    <main className="min-h-screen text-white flex flex-col items-center justify-center px-6">
-      <Link
-        href="/"
-        className="absolute top-6 left-6 flex items-center gap-2 bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/10 rounded-full px-4 py-2 text-sm font-medium transition"
-      >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M19 12H5M12 19l-7-7 7-7" />
-        </svg>
-        Домой
-      </Link>
-
-      <div className="backdrop-blur-2xl bg-white/[0.07] border border-white/20 rounded-2xl p-8 w-full max-w-md shadow-[0_0_40px_rgba(0,0,0,0.5)]">
-        <h1 className="text-2xl font-bold mb-6 text-center">Проверка утечки пароля</h1>
-
-        <div className="flex flex-col sm:flex-row gap-2">
+    <ModuleShell
+      title="Утечка пароля"
+      subtitle="Проверка по базе Pwned Passwords. Пароль не покидает браузер: наружу уходят только 5 символов его хеша."
+      width="md"
+    >
+      <div className="flex flex-col sm:flex-row gap-2">
+        <div className="flex flex-1 min-w-0 items-center rounded-lg border border-white/15 bg-black/40 focus-within:border-[#D4B16A]/70 transition">
           <input
-            type="password"
+            type={show ? "text" : "password"}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && check()}
             placeholder="Введите пароль"
-            className="flex-1 bg-black/40 border border-white/10 rounded-lg px-4 py-2.5 outline-none focus:border-white/30 transition"
+            autoComplete="off"
+            className="w-full min-w-0 bg-transparent px-4 py-2.5 outline-none text-sm"
           />
           <button
-            onClick={checkPassword}
-            disabled={loading || !password}
-            className="bg-white text-black rounded-lg px-5 py-2.5 font-medium disabled:opacity-40 hover:bg-gray-200 transition"
+            type="button"
+            onClick={() => setShow((s) => !s)}
+            className="px-3 text-xs text-gray-400 hover:text-white transition"
           >
-            {loading ? "..." : "Проверить"}
+            {show ? "Скрыть" : "Показать"}
           </button>
         </div>
-
-        {result && (
-          <button
-            onClick={copyResult}
-            className={
-              "mt-6 w-full text-center rounded-lg px-4 py-3 transition cursor-pointer " +
-              (result.found
-                ? "bg-red-500/10 border border-red-500/30 hover:bg-red-500/20"
-                : "bg-green-500/10 border border-green-500/30 hover:bg-green-500/20")
-            }
-          >
-            <p className="text-lg font-bold">
-              {result.found
-                ? "Найден в утечках: " + result.count.toLocaleString() + " раз"
-                : "Не найден в известных утечках"}
-            </p>
-            <p className="text-xs text-gray-400 mt-1">{copied ? "Скопировано" : "Нажмите, чтобы скопировать"}</p>
-          </button>
-        )}
+        <button
+          onClick={check}
+          disabled={loading || !password}
+          className="w-full sm:w-auto bg-[#D4B16A] text-black rounded-lg px-5 py-2.5 font-medium disabled:opacity-40 hover:bg-[#E2C98F] active:bg-[#C9A45C] transition"
+        >
+          {loading ? "..." : "Проверить"}
+        </button>
       </div>
-    </main>
+
+      {error && (
+        <div className="mt-6 rounded-lg px-4 py-3 bg-red-500/10 border border-red-500/30">
+          <p className="font-bold text-sm">{error}</p>
+        </div>
+      )}
+
+      {result && result.count === 0 && (
+        <div className="mt-6 rounded-lg px-4 py-3 bg-green-500/10 border border-green-500/30">
+          <p className="font-bold text-sm">Этого пароля нет в известных утечках.</p>
+          <p className="mt-1 text-xs text-gray-400">
+            Это не гарантия безопасности: пароль может быть слабым или утечка ещё не попала в базу.
+          </p>
+        </div>
+      )}
+
+      {result && result.count > 0 && (
+        <div className="mt-6 rounded-lg px-4 py-3 bg-red-500/10 border border-red-500/30">
+          <p className="font-bold text-sm">
+            Пароль найден в утечках: {result.count.toLocaleString("ru-RU")} раз.
+          </p>
+          <p className="mt-1 text-xs text-gray-300">Не используйте его нигде и смените, если он ваш.</p>
+        </div>
+      )}
+    </ModuleShell>
   );
 }
