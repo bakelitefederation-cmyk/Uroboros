@@ -27,6 +27,9 @@ const I = {
   pin: "M12 21s7-6 7-12a7 7 0 1 0-14 0c0 6 7 12 7 12zM12 11.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z",
   plane: "M10.5 13.5L3 11l1-2 8 1 5-5a2 2 0 0 1 3 3l-5 5 1 8-2 1-2.5-7.5L8 17l-1 3-1.5-.5 1-3.5z",
   doc: "M5 3h11l3 3v15H5zM9 9h6M9 13h6M9 17h4",
+  dns: "M4 6h16M4 12h16M4 18h16M7 6v.01M7 12v.01M7 18v.01",
+  tree: "M12 3v6M12 9H6v6M12 9h6v6M6 15v5M18 15v5",
+  cert: "M4 4h16v12H4zM8 20l4-3 4 3V16M8 9h8M8 12h5",
   spark: "M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8zM19 16l.8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8z",
 };
 
@@ -49,6 +52,16 @@ const GROUPS: Group[] = [
       { title: "Проверка ссылки", desc: "Сканирование URL в 70+ антивирусах", href: "/virustotal", icon: I.shield },
       { title: "Wayback Machine", desc: "Архивные копии страницы и правки", href: "/wayback", icon: I.clock },
       { title: "Google Dork генератор", desc: "Готовые запросы по сайту и словам", href: "/dork", icon: I.search },
+    ],
+  },
+  {
+    name: "Домены и сайты",
+    hint: "Цепочка: кому принадлежит, куда указывает, какие поддомены, как отвечает",
+    items: [
+      { title: "Регистрация домена", desc: "Дата создания, регистратор, серверы имён", href: "/rdap", icon: I.clock },
+      { title: "DNS-записи", desc: "Адреса, почта, TXT и серверы имён", href: "/dns", icon: I.dns },
+      { title: "Поддомены", desc: "Из журналов сертификатов, без перебора", href: "/subdomains", icon: I.tree },
+      { title: "Проверка сайта", desc: "Редиректы, заголовки, защита", href: "/site-check", icon: I.cert },
     ],
   },
   {
