@@ -22,6 +22,28 @@ function freqsOf(key: string): [number, number] {
   return Array(2).fill(0) as [number, number];
 }
 
+// Реализация алгоритма Гёрцеля для вычисления мощности конкретной частоты
+function goertzels(data: Float32Array, targetFreq: number, sampleRate: number): number {
+  const numSamples = data.length;
+  const k = Math.round((numSamples * targetFreq) / sampleRate);
+  const omega = (2 * Math.PI * k) / numSamples;
+  const sine = Math.sin(omega);
+  const cosine = Math.cos(omega);
+  const coeff = 2 * cosine;
+
+  let q0 = 0;
+  let q1 = 0;
+  let q2 = 0;
+
+  for (let i = 0; i < numSamples; i++) {
+    q0 = coeff * q1 - q2 + data[i];
+    q2 = q1;
+    q1 = q0;
+  }
+
+  return q1 * q1 + q2 * q2 - coeff * q1 * q2;
+}
+
 const sleep = (ms: number) => new Promise((res) => setTimeout(res, ms));
 
 export default function DtmfTrainer() {
@@ -43,10 +65,12 @@ export default function DtmfTrainer() {
   const [seqInput, setSeqInput] = useState("");
   const [playing, setPlaying] = useState(false);
 
-  // Состояния для файла
+  // Состояния для файла и расшифровки
   const [fileName, setFileName] = useState<string | null>(null);
   const [isFilePlaying, setIsFilePlaying] = useState(false);
   const [isDecoding, setIsDecoding] = useState(false);
+  const [decodedResult, setDecodedResult] = useState("");
+  const [isCopied, setIsCopied] = useState(false);
 
   // режим «угадай клавишу»
   const [quiz, setQuiz] = useState(false);
@@ -109,6 +133,63 @@ export default function DtmfTrainer() {
     setPressed((p) => (p === key ? null : p));
   }, []);
 
+  // Функция декодирования буфера с использованием алгоритма Гёрцеля
+  const decodeAudioBuffer = (audioBuffer: AudioBuffer) => {
+    const sampleRate = audioBuffer.sampleRate;
+    // Объединяем каналы в один моно-сигнал для анализа
+    const channelData = audioBuffer.getChannelData(0);
+    
+    const windowSize = 1024; 
+    const stepSize = 512;   
+    let resultStr = "";
+    let lastChar = "";
+    let silenceCounter = 0;
+
+    for (let offset = 0; offset < channelData.length - windowSize; offset += stepSize) {
+      const windowData = channelData.subarray(offset, offset + windowSize);
+
+      // Ищем максимальную мощность в нижних частотах (строки)
+      let maxRowPower = 0;
+      let bestRowIndex = -1;
+      for (let i = 0; i < ROWS.length; i++) {
+        const p = goertzels(windowData, ROWS[i], sampleRate);
+        if (p > maxRowPower) {
+          maxRowPower = p;
+          bestRowIndex = i;
+        }
+      }
+
+      // Ищем максимальную мощность в верхних частотах (столбцы)
+      let maxColPower = 0;
+      let bestColIndex = -1;
+      for (let i = 0; i < COLS.length; i++) {
+        const p = goertzels(windowData, COLS[i], sampleRate);
+        if (p > maxColPower) {
+          maxColPower = p;
+          bestColIndex = i;
+        }
+      }
+
+      // Порог чувствительности, чтобы отсечь тишину и шумы
+      const powerThreshold = 1.5; 
+      if (maxRowPower > powerThreshold && maxColPower > powerThreshold) {
+        const currentChar = KEYS[bestRowIndex][bestColIndex];
+        // Если символ стабильно удерживается и это не дребезг контакта
+        if (currentChar !== lastChar && silenceCounter > 1) {
+          resultStr += currentChar;
+        }
+        lastChar = currentChar;
+        silenceCounter = 0;
+      } else {
+        silenceCounter++;
+        if (silenceCounter > 2) {
+          lastChar = ""; // Фиксируем паузу между нажатиями кнопок
+        }
+      }
+    }
+    setDecodedResult(resultStr);
+  };
+
   // Обработчик загрузки файла
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -116,6 +197,7 @@ export default function DtmfTrainer() {
 
     setFileName(file.name);
     setIsDecoding(true);
+    setDecodedResult("");
     stopAudioFile();
 
     try {
@@ -123,6 +205,9 @@ export default function DtmfTrainer() {
       const arrayBuffer = await file.arrayBuffer();
       const decodedData = await ctx.decodeAudioData(arrayBuffer);
       audioBufferRef.current = decodedData;
+      
+      // Сразу запускаем автоматический анализ и парсинг частот
+      decodeAudioBuffer(decodedData);
     } catch (err) {
       console.error("Ошибка декодирования аудио:", err);
       alert("Не удалось прочитать аудиофайл. Убедитесь, что это корректный mp3/wav.");
@@ -286,11 +371,16 @@ export default function DtmfTrainer() {
     setScore({ ok: 0, total: 0 });
   }
 
-  // Безопасный расчет частот для рендера (защищен от вырезания двоеточий парсером)
-  const currentFreqs = last ? freqsOf(last) : Array(2).fill(0);
-  const lo = currentFreqs[0];
-  const hi = currentFreqs[1];
+  const copyToClipboard = () => {
+    if (!decodedResult) return;
+    navigator.clipboard.writeText(decodedResult);
+    setIsCopied(true);
+    setTimeout(() => setIsCopied(false), 2000);
+  };
 
+  const currentFreqs = last ? freqsOf(last) : Array(2).fill(0);
+  const lo = currentFreqs;
+  const hi = currentFreqs;
   return (
     <ModuleShell
       title="Телефонный тренажёр"
@@ -355,112 +445,3 @@ export default function DtmfTrainer() {
           </p>
         </div>
       </div>
-
-      {/* Инструменты: генератор последовательности и ЗАГРУЗКА АУДИО */}
-      <div className="mt-6 grid gap-6 md:grid-cols-2 pt-6 border-t border-neutral-950">
-        
-        {/* Проигрывание строки */}
-        <div className="border border-neutral-800 rounded-2xl p-4 bg-[#0a0b0d] flex flex-col justify-between min-h-[120px]">
-          <label className="block text-xs font-medium text-neutral-400 mb-3">
-            Проиграть набор цифр и посмотреть, как он выглядит на спектрограмме:
-          </label>
-          <div className="grid grid-cols-[1fr_auto] gap-3 items-center">
-            <input
-              type="text"
-              value={seqInput}
-              onChange={(e) => setSeqInput(e.target.value)}
-              placeholder="например 123*45#"
-              disabled={playing}
-              className="w-full h-11 bg-black border border-neutral-800 rounded-xl px-3 text-sm text-white focus:outline-none focus:border-neutral-700 disabled:opacity-50"
-            />
-            <button
-              onClick={playSequence}
-              disabled={playing || !seqInput}
-              className="h-11 bg-[#d4b16a] hover:bg-[#c2a05d] text-black text-xs font-semibold px-5 rounded-xl transition-colors disabled:opacity-40 whitespace-nowrap"
-            >
-              {playing ? "Играет..." : "Проиграть"}
-            </button>
-          </div>
-        </div>
-
-        {/* ЗАГРУЗКА И ДЕКОДИРОВАНИЕ АУДИОФАЙЛА */}
-        <div className="border border-neutral-800 rounded-2xl p-4 bg-[#0a0b0d] flex flex-col justify-between min-h-[120px]">
-          <label className="block text-xs font-medium text-neutral-400 mb-3">
-            Загрузить аудиофайл для анализа (wav, mp3), чтобы прослушать DTMF:
-          </label>
-          <div className="grid grid-cols-[1fr_auto] gap-3 items-center">
-            <label className="flex items-center justify-between bg-black border border-neutral-800 rounded-xl px-3 h-11 text-sm text-neutral-400 cursor-pointer hover:border-neutral-700 transition-colors overflow-hidden">
-              <span className="truncate pr-2 text-xs text-white max-w-[120px] sm:max-w-[180px]">
-                {fileName ? fileName : "Выбрать файл..."}
-              </span>
-              <input
-                type="file"
-                accept="audio/*"
-                onChange={handleFileUpload}
-                className="hidden"
-              />
-              <span className="text-[11px] bg-neutral-900 text-neutral-300 px-2 py-1 rounded-md border border-neutral-800 select-none flex-shrink-0">Обзор</span>
-            </label>
-            <button
-              onClick={playAudioFile}
-              disabled={!audioBufferRef.current || isDecoding}
-              className={`text-xs font-semibold px-6 h-11 rounded-xl transition-colors whitespace-nowrap ${
-                isFilePlaying 
-                  ? "bg-red-900/40 text-red-200 border border-red-800 hover:bg-red-900/60" 
-                  : "bg-neutral-800 hover:bg-neutral-700 text-white disabled:opacity-30"
-              }`}
-            >
-              {isDecoding ? "Чтение..." : isFilePlaying ? "Стоп" : "Пуск"}
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Блок тренировки слуха */}
-      <div className="mt-6 border-t border-neutral-950 pt-6">
-        <h3 className="text-sm font-semibold text-white mb-2">Угадай клавишу</h3>
-        {!quiz ? (
-          <div className="flex items-center justify-between bg-[#0a0b0d]/30 border border-neutral-900 rounded-2xl p-4">
-            <p className="text-xs text-neutral-400 max-w-md">
-              Тренировка слуха: сайт играет тон, вы нажимаете клавишу, которая, по-вашему, прозвучала.
-            </p>
-            <button
-              onClick={() => { toggleQuiz(true); setTimeout(nextQuestion, 100); }}
-              className="bg-neutral-800 hover:bg-neutral-700 text-white text-xs font-semibold py-2 px-4 rounded-xl transition-colors"
-            >
-              Начать тренировку
-            </button>
-          </div>
-        ) : (
-          <div className="bg-[#0a0b0d] border border-neutral-800 rounded-2xl p-4">
-            <div className="flex justify-between items-center mb-3">
-              <span className="text-xs text-neutral-400">
-                Счёт: <strong className="text-white">{score.ok}</strong> / {score.total}
-              </span>
-              <div className="flex gap-2">
-                <button onClick={replay} className="text-xs border border-neutral-800 hover:border-neutral-700 text-white px-3 py-1.5 rounded-lg">
-                  Повторить звук
-                </button>
-                <button onClick={nextQuestion} disabled={!verdict} className="text-xs bg-[#d4b16a] text-black font-semibold px-3 py-1.5 rounded-lg disabled:opacity-50">
-                  Следующий
-                </button>
-                <button onClick={() => toggleQuiz(false)} className="text-xs text-neutral-400 hover:text-white ml-2 underline">
-                  Выйти
-                </button>
-              </div>
-            </div>
-            {verdict && (
-              <div className={`text-sm font-medium p-2.5 rounded-xl border ${verdict.startsWith("Верно") ? "bg-emerald-950/20 border-emerald-900 text-emerald-400" : "bg-rose-950/20 border-rose-900 text-rose-400"}`}>
-                {verdict}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      <p className="mt-6 text-[11px] text-neutral-600 leading-normal">
-        Тренажёр учебный: он только воспроизводит тоны и визуализирует любой входящий звук в диапазоне DTMF. Расшифровки чужих разговоров здесь нет и не будет.
-      </p>
-    </ModuleShell>
-  );
-}
