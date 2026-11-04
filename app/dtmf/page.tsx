@@ -286,7 +286,7 @@ export default function DtmfTrainer() {
     setScore({ ok: 0, total: 0 });
   }
 
-  // Безопасный деструктуринг (защищен от срезов двоеточий парсером)
+  // Безопасный расчет частот для рендера (защищен от вырезания двоеточий парсером)
   const currentFreqs = last ? freqsOf(last) : Array(2).fill(0);
   const lo = currentFreqs[0];
   const hi = currentFreqs[1];
@@ -345,7 +345,7 @@ export default function DtmfTrainer() {
             <div className="relative border border-neutral-900 rounded-lg overflow-hidden bg-black">
               <canvas ref={canvasRef} width={200} height={120} className="block" />
               <div className="absolute right-1 bottom-1 text-[9px] text-neutral-600 pointer-events-none text-right font-mono">
-                1477<br />1336<br />1209<br /><br />941<br />852<br />770<br />667
+                1477<br />1336<br />1209<br /><br />941<br />852<br />770<br />697
               </div>
             </div>
           </div>
@@ -357,26 +357,26 @@ export default function DtmfTrainer() {
       </div>
 
       {/* Инструменты: генератор последовательности и ЗАГРУЗКА АУДИО */}
-      <div className="mt-6 grid gap-4 md:grid-cols-2 pt-6 border-t border-neutral-950">
+      <div className="mt-6 grid gap-6 md:grid-cols-2 pt-6 border-t border-neutral-950">
         
         {/* Проигрывание строки */}
-        <div className="border border-neutral-900 rounded-2xl p-4 bg-[#0a0b0d]/50 flex flex-col justify-between">
-          <label className="block text-xs font-medium text-neutral-400 mb-2">
+        <div className="border border-neutral-800 rounded-2xl p-4 bg-[#0a0b0d] flex flex-col justify-between min-h-[120px]">
+          <label className="block text-xs font-medium text-neutral-400 mb-3">
             Проиграть набор цифр и посмотреть, как он выглядит на спектрограмме:
           </label>
-          <div className="flex gap-2">
+          <div className="grid grid-cols-[1fr_auto] gap-3 items-center">
             <input
               type="text"
               value={seqInput}
               onChange={(e) => setSeqInput(e.target.value)}
               placeholder="например 123*45#"
               disabled={playing}
-              className="flex-1 bg-black border border-neutral-800 rounded-xl px-3 text-sm text-white focus:outline-none focus:border-neutral-700 disabled:opacity-50"
+              className="w-full h-11 bg-black border border-neutral-800 rounded-xl px-3 text-sm text-white focus:outline-none focus:border-neutral-700 disabled:opacity-50"
             />
             <button
               onClick={playSequence}
               disabled={playing || !seqInput}
-              className="bg-[#d4b16a] hover:bg-[#c2a05d] text-black text-xs font-semibold px-4 rounded-xl transition-colors disabled:opacity-40"
+              className="h-11 bg-[#d4b16a] hover:bg-[#c2a05d] text-black text-xs font-semibold px-5 rounded-xl transition-colors disabled:opacity-40 whitespace-nowrap"
             >
               {playing ? "Играет..." : "Проиграть"}
             </button>
@@ -384,13 +384,13 @@ export default function DtmfTrainer() {
         </div>
 
         {/* ЗАГРУЗКА И ДЕКОДИРОВАНИЕ АУДИОФАЙЛА */}
-        <div className="border border-neutral-900 rounded-2xl p-4 bg-[#0a0b0d]/50 flex flex-col justify-between">
-          <label className="block text-xs font-medium text-neutral-400 mb-2">
+        <div className="border border-neutral-800 rounded-2xl p-4 bg-[#0a0b0d] flex flex-col justify-between min-h-[120px]">
+          <label className="block text-xs font-medium text-neutral-400 mb-3">
             Загрузить аудиофайл для анализа (wav, mp3), чтобы прослушать DTMF:
           </label>
-          <div className="flex gap-2">
-            <label className="flex-1 flex items-center justify-between bg-black border border-neutral-800 rounded-xl px-3 h-10 text-sm text-neutral-400 cursor-pointer hover:border-neutral-700 transition-colors overflow-hidden">
-              <span className="truncate max-w-[140px] text-xs text-white">
+          <div className="grid grid-cols-[1fr_auto] gap-3 items-center">
+            <label className="flex items-center justify-between bg-black border border-neutral-800 rounded-xl px-3 h-11 text-sm text-neutral-400 cursor-pointer hover:border-neutral-700 transition-colors overflow-hidden">
+              <span className="truncate pr-2 text-xs text-white max-w-[120px] sm:max-w-[180px]">
                 {fileName ? fileName : "Выбрать файл..."}
               </span>
               <input
@@ -399,12 +399,12 @@ export default function DtmfTrainer() {
                 onChange={handleFileUpload}
                 className="hidden"
               />
-              <span className="text-[11px] bg-neutral-900 text-neutral-300 px-2 py-0.5 rounded-md border border-neutral-800 select-none">Обзор</span>
+              <span className="text-[11px] bg-neutral-900 text-neutral-300 px-2 py-1 rounded-md border border-neutral-800 select-none flex-shrink-0">Обзор</span>
             </label>
             <button
               onClick={playAudioFile}
               disabled={!audioBufferRef.current || isDecoding}
-              className={`text-xs font-semibold px-4 h-10 rounded-xl transition-colors ${
+              className={`text-xs font-semibold px-6 h-11 rounded-xl transition-colors whitespace-nowrap ${
                 isFilePlaying 
                   ? "bg-red-900/40 text-red-200 border border-red-800 hover:bg-red-900/60" 
                   : "bg-neutral-800 hover:bg-neutral-700 text-white disabled:opacity-30"
