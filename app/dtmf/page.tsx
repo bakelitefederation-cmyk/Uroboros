@@ -2,8 +2,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import ModuleShell from "../components/ModuleShell";
 
-const ROWS = [697, 770, 852, 941];
-const COLS = [1209, 1336, 1477];
+const ROWS =;
+const COLS =;
 const KEYS = [
   ["1", "2", "3"],
   ["4", "5", "6"],
@@ -19,7 +19,7 @@ function freqsOf(key: string): [number, number] {
     const c = KEYS[r].indexOf(key);
     if (c >= 0) return [ROWS[r], COLS[c]];
   }
-  return [0, 0];
+  return;
 }
 
 const sleep = (ms: number) => new Promise((res) => setTimeout(res, ms));
@@ -33,11 +33,20 @@ export default function DtmfTrainer() {
   const rafRef = useRef<number>(0);
   const cancelSeq = useRef(false);
 
+  // Ссылки для работы с загруженным аудиофайлом
+  const audioBufferRef = useRef<AudioBuffer | null>(null);
+  const audioSourceRef = useRef<AudioBufferSourceNode | null>(null);
+
   const [pressed, setPressed] = useState<string | null>(null);
   const [last, setLast] = useState<string | null>(null);
   const [typed, setTyped] = useState("");
   const [seqInput, setSeqInput] = useState("");
   const [playing, setPlaying] = useState(false);
+
+  // Состояния для файла
+  const [fileName, setFileName] = useState<string | null>(null);
+  const [isFilePlaying, setIsFilePlaying] = useState(false);
+  const [isDecoding, setIsDecoding] = useState(false);
 
   // режим «угадай клавишу»
   const [quiz, setQuiz] = useState(false);
@@ -101,6 +110,68 @@ export default function DtmfTrainer() {
     activeRef.current.delete(key);
     setPressed((p) => (p === key ? null : p));
   }, []);
+
+  // Обработчик загрузки файла
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setFileName(file.name);
+    setIsDecoding(true);
+    stopAudioFile(); // Останавливаем старый файл, если он играл
+
+    try {
+      const ctx = ensureAudio();
+      const arrayBuffer = await file.arrayBuffer();
+      // Декодируем аудио в буфер, понятный Web Audio API
+      const decodedData = await ctx.decodeAudioData(arrayBuffer);
+      audioBufferRef.current = decodedData;
+    } catch (err) {
+      console.error("Ошибка декодирования аудио:", err);
+      alert("Не удалось прочитать аудиофайл. Убедитесь, что это корректный mp3/wav.");
+      setFileName(null);
+      audioBufferRef.current = null;
+    } finally {
+      setIsDecoding(false);
+    }
+  };
+
+  // Запуск воспроизведения файла
+  const playAudioFile = () => {
+    const ctx = ensureAudio();
+    if (!audioBufferRef.current || !analyserRef.current) return;
+
+    if (isFilePlaying) {
+      stopAudioFile();
+      return;
+    }
+
+    // Создаем источник звука из буфера
+    const source = ctx.createBufferSource();
+    source.buffer = audioBufferRef.current;
+    
+    // Подключаем к нашему анализатору спектра (чтобы рисовался график DTMF)
+    source.connect(analyserRef.current);
+    
+    source.onended = () => {
+      setIsFilePlaying(false);
+    };
+
+    audioSourceRef.current = source;
+    source.start(0);
+    setIsFilePlaying(true);
+  };
+
+  // Остановка воспроизведения файла
+  const stopAudioFile = () => {
+    if (audioSourceRef.current) {
+      try {
+        audioSourceRef.current.stop();
+      } catch (e) {}
+      audioSourceRef.current = null;
+    }
+    setIsFilePlaying(false);
+  };
 
   // нажатие клавиши пользователем
   const press = useCallback(
@@ -180,6 +251,7 @@ export default function DtmfTrainer() {
     return () => {
       cancelSeq.current = true;
       map.forEach((a) => a.oscs.forEach((o) => { try { o.stop(); } catch {} }));
+      if (audioSourceRef.current) { try { audioSourceRef.current.stop(); } catch {} }
       ctxRef.current?.close().catch(() => {});
     };
   }, []);
@@ -222,7 +294,7 @@ export default function DtmfTrainer() {
     setScore({ ok: 0, total: 0 });
   }
 
-  const [lo, hi] = last ? freqsOf(last) : [0, 0];
+  const [lo, hi] = last ? freqsOf(last) :;
 
   return (
     <ModuleShell
@@ -237,122 +309,3 @@ export default function DtmfTrainer() {
             {KEYS.flat().map((k) => (
               <button
                 key={k}
-                onPointerDown={(e) => { e.preventDefault(); press(k); }}
-                onPointerUp={() => stopTone(k)}
-                onPointerLeave={() => stopTone(k)}
-                onPointerCancel={() => stopTone(k)}
-                className={
-                  "h-14 rounded-xl border text-xl font-semibold select-none touch-none transition-colors " +
-                  (pressed === k
-                    ? "border-[#D4B16A] bg-[#D4B16A] text-black"
-                    : "border-white/15 bg-white/[0.06] hover:border-[#D4B16A]/60")
-                }
-              >
-                {k}
-              </button>
-            ))}
-          </div>
-
-          {!quiz && (
-            <div className="mt-3 flex items-center justify-between gap-2 rounded-lg border border-white/10 bg-black/30 px-3 py-2">
-              <span className="min-h-[1.5rem] break-all font-mono text-base tracking-widest">{typed || <span className="text-gray-500">набор</span>}</span>
-              <button onClick={() => setTyped("")} className="text-xs text-gray-400 underline hover:text-[#D4B16A]">Стереть</button>
-            </div>
-          )}
-        </div>
-
-        {/* Справа: частоты и спектрограмма */}
-        <div className="min-w-0">
-          <div className="rounded-lg border border-white/10 bg-black/30 px-4 py-3 text-sm">
-            {last && !(quiz && target && !verdict) ? (
-              <p>
-                Клавиша <span className="font-semibold text-[#D4B16A]">{last}</span>: строка {lo} Гц + столбец {hi} Гц
-              </p>
-            ) : (
-              <p className="text-gray-400">
-                {quiz && target && !verdict ? "Частоты скрыты, пока вы не ответите." : "Нажмите клавишу, чтобы увидеть её две частоты."}
-              </p>
-            )}
-          </div>
-
-          <div className="relative mt-3 overflow-hidden rounded-lg border border-white/10">
-            <canvas ref={canvasRef} width={640} height={220} className="block w-full h-auto" aria-label="Спектрограмма звука" />
-            {[...ROWS, ...COLS].map((f) => (
-              <span
-                key={f}
-                className="pointer-events-none absolute left-1 text-[10px] leading-none text-gray-400"
-                style={{ top: `calc(${((F_MAX - f) / (F_MAX - F_MIN)) * 100}% - 5px)` }}
-              >
-                {f}
-              </span>
-            ))}
-          </div>
-          <p className="mt-2 text-xs text-gray-500">
-            По вертикали частота (600–1700 Гц), время идёт слева направо. У каждой клавиши видны две линии: нижняя из группы 697–941 Гц, верхняя из группы 1209–1477 Гц.
-          </p>
-        </div>
-      </div>
-
-      {/* Проиграть последовательность */}
-      {!quiz && (
-        <div className="mt-6">
-          <p className="text-sm text-gray-400">Проиграть набор цифр и посмотреть, как он выглядит на спектрограмме:</p>
-          <div className="mt-2 flex flex-col sm:flex-row gap-2">
-            <input
-              value={seqInput}
-              onChange={(e) => setSeqInput(e.target.value.replace(/[^0-9*#]/g, "").slice(0, 20))}
-              onKeyDown={(e) => e.key === "Enter" && playSequence()}
-              inputMode="tel"
-              placeholder="например 123*45#"
-              className="flex-1 min-w-0 bg-black/40 border border-white/15 rounded-lg px-4 py-2.5 outline-none focus:border-[#D4B16A]/70 transition text-sm font-mono"
-            />
-            <button
-              onClick={playSequence}
-              disabled={playing || !seqInput}
-              className="w-full sm:w-auto bg-[#D4B16A] text-black rounded-lg px-5 py-2.5 font-medium disabled:opacity-40 hover:bg-[#E2C98F] active:bg-[#C9A45C] transition"
-            >
-              {playing ? "Играет..." : "Проиграть"}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Режим «угадай клавишу» */}
-      <div className="mt-8 border-t border-white/10 pt-5">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="font-semibold">Угадай клавишу</p>
-            <p className="text-sm text-gray-400">Тренировка слуха: сайт играет тон, вы нажимаете клавишу, которая, по-вашему, прозвучала.</p>
-          </div>
-          <button
-            onClick={() => toggleQuiz(!quiz)}
-            className="rounded-lg border border-white/15 px-4 py-2 text-sm hover:border-[#D4B16A]/60 hover:text-[#D4B16A] transition-colors"
-          >
-            {quiz ? "Выйти из тренировки" : "Начать тренировку"}
-          </button>
-        </div>
-
-        {quiz && (
-          <div className="mt-4 rounded-lg border border-white/10 bg-black/30 px-4 py-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <button onClick={nextQuestion} className="rounded-lg bg-[#D4B16A] px-4 py-2 text-sm font-medium text-black hover:bg-[#E2C98F] transition">
-                {target ? "Следующий звук" : "Сыграть звук"}
-              </button>
-              {target && !verdict && (
-                <button onClick={replay} className="rounded-lg border border-white/15 px-4 py-2 text-sm hover:border-[#D4B16A]/60 transition-colors">
-                  Повторить
-                </button>
-              )}
-              <span className="ml-auto text-sm text-gray-400">Верно: {score.ok} из {score.total}</span>
-            </div>
-            {verdict && <p className="mt-3 text-sm font-medium">{verdict}</p>}
-          </div>
-        )}
-      </div>
-
-      <p className="mt-6 text-xs text-gray-500">
-        Тренажёр учебный: он только воспроизводит тоны. Расшифровки чужих разговоров здесь нет и не будет.
-      </p>
-    </ModuleShell>
-  );
-}
