@@ -19,7 +19,7 @@ function freqsOf(key: string): [number, number] {
     const c = KEYS[r].indexOf(key);
     if (c >= 0) return [ROWS[r], COLS[c]];
   }
-  return;
+  return Array(2).fill(0) as [number, number];
 }
 
 const sleep = (ms: number) => new Promise((res) => setTimeout(res, ms));
@@ -286,9 +286,10 @@ export default function DtmfTrainer() {
     setScore({ ok: 0, total: 0 });
   }
 
-  // Безопасный расчет частот для рендера (защищен от вырезания двоеточий парсером)
-  const lo = last ? freqsOf(last)[0] : 0;
-  const hi = last ? freqsOf(last)[1] : 0;
+  // Безопасный деструктуринг (защищен от срезов двоеточий парсером)
+  const currentFreqs = last ? freqsOf(last) : Array(2).fill(0);
+  const lo = currentFreqs[0];
+  const hi = currentFreqs[1];
 
   return (
     <ModuleShell
