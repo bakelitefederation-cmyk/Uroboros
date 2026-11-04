@@ -31,6 +31,7 @@ const I = {
   tree: "M12 3v6M12 9H6v6M12 9h6v6M6 15v5M18 15v5",
   cert: "M4 4h16v12H4zM8 20l4-3 4 3V16M8 9h8M8 12h5",
   graph: "M5 5h.01M19 8h.01M12 19h.01M5 5l7 14M19 8l-7 11M5 5l14 3",
+  keypad: "M6 4h.01M12 4h.01M18 4h.01M6 10h.01M12 10h.01M18 10h.01M6 16h.01M12 16h.01M18 16h.01M12 21h.01",
   spark: "M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8zM19 16l.8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8z",
 };
 
@@ -39,8 +40,6 @@ const GROUPS: Group[] = [
     name: "Люди и аккаунты",
     hint: "Проверка собственных данных и публичных следов",
     items: [
-      
-      { title: "Поиск по лицу", desc: "Через SERPAPI: VK, OK, TikTok, Clubhouse — по всем базам одновременно", href: "/face-search", icon: I.user },
       { title: "Поиск по нику", desc: "На каких из 400 сайтов занят никнейм", href: "/username", icon: I.user },
       { title: "Поиск по почте", desc: "Домен, одноразовая почта, Gravatar", href: "/email", icon: I.mail },
       { title: "Проверка номера", desc: "Формат, страна и оператор", href: "/phone", icon: I.phone },
@@ -83,6 +82,13 @@ const GROUPS: Group[] = [
     items: [
       { title: "Гео-мультипоиск", desc: "Координаты в Maps, Earth, Yandex, SunCalc", href: "/geo", icon: I.pin },
       { title: "Отслеживание самолётов", desc: "Позиция, высота, скорость по позывному", href: "/aircraft", icon: I.plane },
+    ],
+  },
+  {
+    name: "Учебная лаборатория",
+    hint: "Разобраться, как это устроено",
+    items: [
+      { title: "Телефонный тренажёр", desc: "Как кнопки телефона звучат: тоны DTMF и спектрограмма", href: "/dtmf", icon: I.keypad },
     ],
   },
   {
