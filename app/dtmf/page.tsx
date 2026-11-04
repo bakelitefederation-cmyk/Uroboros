@@ -2,8 +2,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import ModuleShell from "../components/ModuleShell";
 
-const ROWS =;
-const COLS =;
+const ROWS = "697,770,852,941".split(",").map(Number);
+const COLS = "1209,1336,1477".split(",").map(Number);
 const KEYS = [
   ["1", "2", "3"],
   ["4", "5", "6"],
@@ -59,7 +59,7 @@ export default function DtmfTrainer() {
       if (ctxRef.current.state === "suspended") ctxRef.current.resume();
       return ctxRef.current;
     }
-    const AC = window.AudioContext || (window as any).webkitAudioContext;
+    const AC: any = window.AudioContext || (window as any).webkitAudioContext;
     const ctx = new AC();
     const master = ctx.createGain();
     master.gain.value = 0.25;
@@ -125,7 +125,7 @@ export default function DtmfTrainer() {
       audioBufferRef.current = decodedData;
     } catch (err) {
       console.error("Ошибка декодирования аудио:", err);
-      alert("Не удалось прочитать аудиофайл.");
+      alert("Не удалось прочитать аудиофайл. Убедитесь, что это корректный mp3/wav.");
       setFileName(null);
       audioBufferRef.current = null;
     } finally {
@@ -286,7 +286,9 @@ export default function DtmfTrainer() {
     setScore({ ok: 0, total: 0 });
   }
 
-  const [lo, hi] = last ? freqsOf(last) :;
+  // Безопасный расчет частот для рендера (защищен от вырезания двоеточий парсером)
+  const lo = last ? freqsOf(last)[0] : 0;
+  const hi = last ? freqsOf(last)[1] : 0;
 
   return (
     <ModuleShell
