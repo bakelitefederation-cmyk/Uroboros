@@ -59,8 +59,7 @@ export default function DtmfTrainer() {
       if (ctxRef.current.state === "suspended") ctxRef.current.resume();
       return ctxRef.current;
     }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const AC: typeof AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+    const AC = window.AudioContext || (window as any).webkitAudioContext;
     const ctx = new AC();
     const master = ctx.createGain();
     master.gain.value = 0.25;
@@ -74,7 +73,6 @@ export default function DtmfTrainer() {
     analyserRef.current = analyser;
     return ctx;
   }, []);
-
   const startTone = useCallback(
     (key: string) => {
       const ctx = ensureAudio();
@@ -118,17 +116,16 @@ export default function DtmfTrainer() {
 
     setFileName(file.name);
     setIsDecoding(true);
-    stopAudioFile(); // Останавливаем старый файл, если он играл
+    stopAudioFile();
 
     try {
       const ctx = ensureAudio();
       const arrayBuffer = await file.arrayBuffer();
-      // Декодируем аудио в буфер, понятный Web Audio API
       const decodedData = await ctx.decodeAudioData(arrayBuffer);
       audioBufferRef.current = decodedData;
     } catch (err) {
       console.error("Ошибка декодирования аудио:", err);
-      alert("Не удалось прочитать аудиофайл. Убедитесь, что это корректный mp3/wav.");
+      alert("Не удалось прочитать аудиофайл.");
       setFileName(null);
       audioBufferRef.current = null;
     } finally {
@@ -146,13 +143,9 @@ export default function DtmfTrainer() {
       return;
     }
 
-    // Создаем источник звука из буфера
     const source = ctx.createBufferSource();
     source.buffer = audioBufferRef.current;
-    
-    // Подключаем к нашему анализатору спектра (чтобы рисовался график DTMF)
     source.connect(analyserRef.current);
-    
     source.onended = () => {
       setIsFilePlaying(false);
     };
@@ -255,7 +248,6 @@ export default function DtmfTrainer() {
       ctxRef.current?.close().catch(() => {});
     };
   }, []);
-
   async function playSequence() {
     const digits = seqInput.split("").filter((c) => ALL.includes(c));
     if (!digits.length || playing) return;
@@ -309,3 +301,163 @@ export default function DtmfTrainer() {
             {KEYS.flat().map((k) => (
               <button
                 key={k}
+                onPointerDown={(e) => { e.preventDefault(); press(k); }}
+                onPointerUp={() => stopTone(k)}
+                onPointerLeave={() => stopTone(k)}
+                onPointerCancel={() => stopTone(k)}
+                className={
+                  "h-14 rounded-xl border text-xl font-semibold select-none touch-none transition-colors " +
+                  (pressed === k
+                    ? "bg-[#d4b16a] text-black border-[#d4b16a]"
+                    : "bg-transparent text-white border-neutral-800 hover:border-neutral-700")
+                }
+              >
+                {k}
+              </button>
+            ))}
+          </div>
+
+          <div className="mt-4 flex justify-between text-xs text-neutral-400 px-1">
+            <span>набор: <strong className="text-white tracking-wider">{typed}</strong></span>
+            <button onClick={() => setTyped("")} className="hover:text-white underline">Стереть</button>
+          </div>
+        </div>
+
+        {/* Экран частот и спектрограмма */}
+        <div className="flex flex-col justify-between border border-neutral-800 rounded-2xl p-4 bg-[#0a0b0d]">
+          <div className="flex justify-between items-start gap-4 mb-4">
+            <div className="text-sm text-neutral-400">
+              {last ? (
+                <>
+                  Клавиша <strong className="text-white text-base">{last}</strong>: <br />
+                  Низкий тон: <strong className="text-[#d4b16a]">{lo} Гц</strong> <br />
+                  Высокий тон: <strong className="text-[#d4b16a]">{hi} Гц</strong>
+                </>
+              ) : (
+                "Нажмите клавишу, чтобы увидеть её две частоты."
+              )}
+            </div>
+            
+            {/* Спектрограмма */}
+            <div className="relative border border-neutral-900 rounded-lg overflow-hidden bg-black">
+              <canvas ref={canvasRef} width={200} height={120} className="block" />
+              <div className="absolute right-1 bottom-1 text-[9px] text-neutral-600 pointer-events-none text-right font-mono">
+                1477<br />1336<br />1209<br /><br />941<br />852<br />770<br />667
+              </div>
+            </div>
+          </div>
+          
+          <p className="text-xs text-neutral-500 leading-relaxed">
+            По вертикали частота (600–1700 Гц), время идёт слева направо. У каждой клавиши видны две линии: нижняя из группы 697–941 Гц, верхняя из группы 1209–1477 Гц.
+          </p>
+        </div>
+      </div>
+
+      {/* Инструменты: генератор последовательности и ЗАГРУЗКА АУДИО */}
+      <div className="mt-6 grid gap-4 md:grid-cols-2 pt-6 border-t border-neutral-950">
+        
+        {/* Проигрывание строки */}
+        <div className="border border-neutral-900 rounded-2xl p-4 bg-[#0a0b0d]/50 flex flex-col justify-between">
+          <label className="block text-xs font-medium text-neutral-400 mb-2">
+            Проиграть набор цифр и посмотреть, как он выглядит на спектрограмме:
+          </label>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={seqInput}
+              onChange={(e) => setSeqInput(e.target.value)}
+              placeholder="например 123*45#"
+              disabled={playing}
+              className="flex-1 bg-black border border-neutral-800 rounded-xl px-3 text-sm text-white focus:outline-none focus:border-neutral-700 disabled:opacity-50"
+            />
+            <button
+              onClick={playSequence}
+              disabled={playing || !seqInput}
+              className="bg-[#d4b16a] hover:bg-[#c2a05d] text-black text-xs font-semibold px-4 rounded-xl transition-colors disabled:opacity-40"
+            >
+              {playing ? "Играет..." : "Проиграть"}
+            </button>
+          </div>
+        </div>
+
+        {/* ЗАГРУЗКА И ДЕКОДИРОВАНИЕ АУДИОФАЙЛА */}
+        <div className="border border-neutral-900 rounded-2xl p-4 bg-[#0a0b0d]/50 flex flex-col justify-between">
+          <label className="block text-xs font-medium text-neutral-400 mb-2">
+            Загрузить аудиофайл для анализа (wav, mp3), чтобы прослушать DTMF:
+          </label>
+          <div className="flex gap-2">
+            <label className="flex-1 flex items-center justify-between bg-black border border-neutral-800 rounded-xl px-3 h-10 text-sm text-neutral-400 cursor-pointer hover:border-neutral-700 transition-colors overflow-hidden">
+              <span className="truncate max-w-[140px] text-xs text-white">
+                {fileName ? fileName : "Выбрать файл..."}
+              </span>
+              <input
+                type="file"
+                accept="audio/*"
+                onChange={handleFileUpload}
+                className="hidden"
+              />
+              <span className="text-[11px] bg-neutral-900 text-neutral-300 px-2 py-0.5 rounded-md border border-neutral-800 select-none">Обзор</span>
+            </label>
+            <button
+              onClick={playAudioFile}
+              disabled={!audioBufferRef.current || isDecoding}
+              className={`text-xs font-semibold px-4 h-10 rounded-xl transition-colors ${
+                isFilePlaying 
+                  ? "bg-red-900/40 text-red-200 border border-red-800 hover:bg-red-900/60" 
+                  : "bg-neutral-800 hover:bg-neutral-700 text-white disabled:opacity-30"
+              }`}
+            >
+              {isDecoding ? "Чтение..." : isFilePlaying ? "Стоп" : "Пуск"}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Блок тренировки слуха */}
+      <div className="mt-6 border-t border-neutral-950 pt-6">
+        <h3 className="text-sm font-semibold text-white mb-2">Угадай клавишу</h3>
+        {!quiz ? (
+          <div className="flex items-center justify-between bg-[#0a0b0d]/30 border border-neutral-900 rounded-2xl p-4">
+            <p className="text-xs text-neutral-400 max-w-md">
+              Тренировка слуха: сайт играет тон, вы нажимаете клавишу, которая, по-вашему, прозвучала.
+            </p>
+            <button
+              onClick={() => { toggleQuiz(true); setTimeout(nextQuestion, 100); }}
+              className="bg-neutral-800 hover:bg-neutral-700 text-white text-xs font-semibold py-2 px-4 rounded-xl transition-colors"
+            >
+              Начать тренировку
+            </button>
+          </div>
+        ) : (
+          <div className="bg-[#0a0b0d] border border-neutral-800 rounded-2xl p-4">
+            <div className="flex justify-between items-center mb-3">
+              <span className="text-xs text-neutral-400">
+                Счёт: <strong className="text-white">{score.ok}</strong> / {score.total}
+              </span>
+              <div className="flex gap-2">
+                <button onClick={replay} className="text-xs border border-neutral-800 hover:border-neutral-700 text-white px-3 py-1.5 rounded-lg">
+                  Повторить звук
+                </button>
+                <button onClick={nextQuestion} disabled={!verdict} className="text-xs bg-[#d4b16a] text-black font-semibold px-3 py-1.5 rounded-lg disabled:opacity-50">
+                  Следующий
+                </button>
+                <button onClick={() => toggleQuiz(false)} className="text-xs text-neutral-400 hover:text-white ml-2 underline">
+                  Выйти
+                </button>
+              </div>
+            </div>
+            {verdict && (
+              <div className={`text-sm font-medium p-2.5 rounded-xl border ${verdict.startsWith("Верно") ? "bg-emerald-950/20 border-emerald-900 text-emerald-400" : "bg-rose-950/20 border-rose-900 text-rose-400"}`}>
+                {verdict}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      <p className="mt-6 text-[11px] text-neutral-600 leading-normal">
+        Тренажёр учебный: он только воспроизводит тоны и визуализирует любой входящий звук в диапазоне DTMF. Расшифровки чужих разговоров здесь нет и не будет.
+      </p>
+    </ModuleShell>
+  );
+}
