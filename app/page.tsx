@@ -72,6 +72,7 @@ const GROUPS: Group[] = [
     items: [
       { title: "EXIF фото", desc: "Камера, дата съёмки, GPS", href: "/exif", icon: I.camera },
       { title: "Обратный поиск фото", desc: "Google, Yandex, TinEye, Bing", href: "/reverse-image", icon: I.image },
+      { title: "Поиск по лицу", desc: "Поиск через SERPAPI", href: "/face-search", icon: I.user },
       { title: "QR-анализатор", desc: "Ссылка внутри кода без перехода", href: "/qr", icon: I.qr },
       { title: "Метаданные документа", desc: "Автор и даты в PDF, DOCX, PPTX, XLSX", href: "/doc-metadata", icon: I.file },
     ],
