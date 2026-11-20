@@ -426,17 +426,60 @@ export default function BoardPage() {
     return () => window.removeEventListener('keydown', onKey);
   }, [selectedEdgeId, search.selectedNodeId, removeEdge, removeNode]);
 
-  // --- перемещение холста мышью ---
+  // На телефоне панель — нижняя шторка: сдвигаем вид так, чтобы выбранная карточка не пряталась под ней
+  useEffect(() => {
+    if (!panelOpen || !search.selectedNodeId || typeof window === 'undefined' || window.innerWidth > 640) return;
+    const n = nodes.find((x) => x.id === search.selectedNodeId);
+    const el = viewportRef.current;
+    if (!n || !el) return;
+    const r = el.getBoundingClientRect();
+    const visibleH = r.height * 0.4;
+    setCam((c) => {
+      const cy = c.y + (n.y + n.h / 2) * c.zoom;
+      const cx = c.x + (n.x + n.w / 2) * c.zoom;
+      const okY = cy > 70 && cy < visibleH - 20;
+      const okX = cx > 20 && cx < r.width - 20;
+      if (okY && okX) return c;
+      return { ...c, x: r.width / 2 - (n.x + n.w / 2) * c.zoom, y: Math.max(visibleH / 2, 90) - (n.y + n.h / 2) * c.zoom };
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [panelOpen, search.selectedNodeId]);
+
+  // --- перемещение холста (мышь / один палец) и масштаб двумя пальцами ---
   const pan = useRef<{ sx: number; sy: number; cx: number; cy: number; moved: boolean } | null>(null);
+  const ptrs = useRef(new Map<number, { x: number; y: number }>());
+  const pinch = useRef<{ d: number; z: number; wx: number; wy: number } | null>(null);
+
+  const pinchGeom = () => {
+    const [p1, p2] = [...ptrs.current.values()];
+    const r = viewportRef.current!.getBoundingClientRect();
+    return { d: Math.hypot(p1.x - p2.x, p1.y - p2.y) || 1, mx: (p1.x + p2.x) / 2 - r.left, my: (p1.y + p2.y) / 2 - r.top };
+  };
 
   const onViewportDown = (e: RPE<HTMLDivElement>) => {
     if (e.button !== 0 && e.button !== 1) return;
     if ((e.target as Element).closest('[data-node],[data-edge]')) return;
     e.currentTarget.setPointerCapture(e.pointerId);
+    ptrs.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (ptrs.current.size === 2) {
+      const g = pinchGeom();
+      const c = camRef.current;
+      pinch.current = { d: g.d, z: c.zoom, wx: (g.mx - c.x) / c.zoom, wy: (g.my - c.y) / c.zoom };
+      if (pan.current) pan.current.moved = true;
+      return;
+    }
     pan.current = { sx: e.clientX, sy: e.clientY, cx: cam.x, cy: cam.y, moved: false };
     setPanning(true);
   };
   const onViewportMove = (e: RPE<HTMLDivElement>) => {
+    if (ptrs.current.has(e.pointerId)) ptrs.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pinch.current && ptrs.current.size >= 2) {
+      const g = pinchGeom();
+      const k = pinch.current;
+      const z = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, k.z * (g.d / k.d)));
+      setCam({ zoom: z, x: g.mx - k.wx * z, y: g.my - k.wy * z });
+      return;
+    }
     const p = pan.current;
     if (!p) return;
     const dx = e.clientX - p.sx;
@@ -444,7 +487,16 @@ export default function BoardPage() {
     if (Math.abs(dx) + Math.abs(dy) > 3) p.moved = true;
     setCam((c) => ({ ...c, x: p.cx + dx, y: p.cy + dy }));
   };
-  const onViewportUp = () => {
+  const onViewportUp = (e: RPE<HTMLDivElement>) => {
+    ptrs.current.delete(e.pointerId);
+    if (pinch.current) {
+      // после щипка оставшийся палец продолжает двигать холст без скачка
+      pinch.current = null;
+      const rest = [...ptrs.current.values()][0];
+      pan.current = rest ? { sx: rest.x, sy: rest.y, cx: camRef.current.x, cy: camRef.current.y, moved: true } : null;
+      if (!rest) setPanning(false);
+      return;
+    }
     if (pan.current && !pan.current.moved) clearSelection();
     pan.current = null;
     setPanning(false);
@@ -559,6 +611,7 @@ export default function BoardPage() {
         onPointerDown={onViewportDown}
         onPointerMove={onViewportMove}
         onPointerUp={onViewportUp}
+        onPointerCancel={onViewportUp}
         onDoubleClick={(e) => {
           if ((e.target as Element).closest('[data-node],[data-edge]')) return;
           const w = toWorld(e.clientX, e.clientY);
@@ -598,7 +651,7 @@ export default function BoardPage() {
                     d={d}
                     fill="none"
                     stroke="transparent"
-                    strokeWidth={18}
+                    strokeWidth={26}
                     style={{ pointerEvents: 'stroke', cursor: 'pointer' }}
                     onPointerDown={(ev) => {
                       ev.stopPropagation();
@@ -657,7 +710,7 @@ export default function BoardPage() {
                     }}
                   />
                 ) : (
-                  <div className={`ub-text${n.text ? '' : ' empty'}`}>{n.text || 'Двойной клик — ввести текст'}</div>
+                  <div className={`ub-text${n.text ? '' : ' empty'}`}>{n.text || 'Нажмите — ввести текст'}</div>
                 )}
                 {SIDES.map((s) => (
                   <i
@@ -698,7 +751,7 @@ export default function BoardPage() {
         {!nodes.length && loaded && (
           <div className="ub-empty">
             <b>Доска пуста</b>
-            <span>Двойной клик по холсту создаёт карточку. Стрелки на клавиатуре двигают вид.</span>
+            <span>Нажмите «+ Карточка». Тяните холст пальцем, масштаб — щипком.</span>
           </div>
         )}
       </div>
@@ -1034,6 +1087,31 @@ const CSS = `
 .ub-empty{position:absolute;left:50%;top:45%;transform:translate(-50%,-50%);text-align:center;color:#8c8a84;
   display:flex;flex-direction:column;gap:6px;pointer-events:none}
 .ub-empty b{color:#e8e6e1;font-size:18px}
+
+.ub-root{overscroll-behavior:none;-webkit-tap-highlight-color:transparent;-webkit-text-size-adjust:100%}
+@media (pointer:coarse){
+  .ub-handle{width:24px;height:24px}
+  .ub-handle.top{left:calc(50% - 12px);top:-13px}.ub-handle.bottom{left:calc(50% - 12px);bottom:-13px}
+  .ub-handle.left{top:calc(50% - 12px);left:-13px}.ub-handle.right{top:calc(50% - 12px);right:-13px}
+  .ub-mini{padding:5px 12px}
+  .ub-dot{width:28px;height:28px}
+}
+@media (max-width:640px){
+  .ub-root{height:100dvh}
+  .ub-toolbar{top:max(8px,env(safe-area-inset-top));left:8px;right:8px;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}
+  .ub-toolbar::-webkit-scrollbar{display:none}
+  .ub-toolbar>*{flex:none}
+  .ub-toolbar .ub-btn,.ub-toolbar .ub-seg button{padding:7px 11px;font-size:13px;white-space:nowrap}
+  .ub-panel{left:0;right:0;top:auto;bottom:0;width:100%;max-height:58dvh;border-left:0;border-top:1px solid #2c2e33;
+    border-radius:18px 18px 0 0;box-shadow:0 -10px 30px rgba(0,0,0,.5);padding-bottom:env(safe-area-inset-bottom);overscroll-behavior:contain}
+  .ub-panel header{position:sticky;top:0;background:#0f0f11;z-index:1;padding:12px 16px}
+  .ub-panel .ub-btn{padding:10px 16px}
+  .ub-input,.ub-edit,.ub-panel input,.ub-panel select,.ub-edge-editor input{font-size:16px}
+  .ub-leads{max-height:180px}
+  .ub-edge-editor{bottom:max(10px,env(safe-area-inset-bottom));width:calc(100% - 16px);max-height:45dvh;overflow:auto}
+  .ub-chips button{padding:7px 12px;font-size:13px}
+  .ub-seg button{padding:7px 12px}
+}
 
 .ub-toolbar{position:absolute;top:14px;left:14px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;z-index:5}
 .ub-btn,.ub-mini,.ub-seg button,.ub-chips button{background:#141416;border:1px solid #2c2e33;color:#e8e6e1;border-radius:999px;
