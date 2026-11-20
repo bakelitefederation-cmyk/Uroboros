@@ -98,6 +98,7 @@ const GROUPS: Group[] = [
     items: [
       { title: "Дело", desc: "Находки, граф связей и история проверок", href: "/case", icon: I.graph },
       { title: "Шаблон досье", desc: "Источники, хронология, находки, вывод", href: "/dossier", icon: I.doc },
+      { title: "Доска визуализации", desc: "Интерактивная доска для анализа данных", href: "/board", icon: I.graph },
     ],
   },
 ];
