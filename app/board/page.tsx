@@ -594,12 +594,6 @@ export default function BoardPage() {
                       setPanelOpen(false);
                     }}
                   />
-                  {e.label && (
-                    <text x={mid[0]} y={mid[1] - 8} textAnchor="middle" className="ub-edge-label" style={{ cursor: 'pointer', pointerEvents: 'all' }}
-                      onPointerDown={(ev) => { ev.stopPropagation(); setSelectedEdgeId(e.id); setSearch((s) => ({ ...s, selectedNodeId: null })); setPanelOpen(false); }}>
-                      {e.label}
-                    </text>
-                  )}
                 </g>
               );
             })}
@@ -666,6 +660,26 @@ export default function BoardPage() {
               </div>
             );
           })}
+          <svg className="ub-edges ub-labels">
+            {edges.map((e) => {
+              if (!e.label) return null;
+              const a = byId.get(e.from);
+              const b = byId.get(e.to);
+              if (!a || !b) return null;
+              const [sa, sb] = sidesFor(a, b);
+              const { mid } = pathBetween(anchor(a, sa), DIR[sa], anchor(b, sb), DIR[sb], e.shape);
+              const hidden = nodes.some((n) => mid[0] > n.x - 6 && mid[0] < n.x + n.w + 6 && mid[1] > n.y - 6 && mid[1] < n.y + n.h + 6);
+              if (hidden) return null;
+              const w = e.label.length * 6.6 + 14;
+              return (
+                <g key={`lb${e.id}`} data-edge style={{ cursor: 'pointer', pointerEvents: 'all' }}
+                  onPointerDown={(ev) => { ev.stopPropagation(); setSelectedEdgeId(e.id); setSearch((s) => ({ ...s, selectedNodeId: null })); setPanelOpen(false); }}>
+                  <rect x={mid[0] - w / 2} y={mid[1] - 20} width={w} height={18} rx={9} className="ub-edge-pill" />
+                  <text x={mid[0]} y={mid[1] - 7} textAnchor="middle" className="ub-edge-label">{e.label}</text>
+                </g>
+              );
+            })}
+          </svg>
         </div>
 
         {!nodes.length && loaded && (
@@ -977,13 +991,16 @@ const CSS = `
 .ub-viewport.panning{cursor:grabbing}
 .ub-world{position:absolute;left:0;top:0;width:0;height:0;transform-origin:0 0}
 .ub-edges{position:absolute;left:0;top:0;width:1px;height:1px;overflow:visible;pointer-events:none}
-.ub-edge-label{fill:#d9d6cf;font-size:12px;paint-order:stroke;stroke:#08080a;stroke-width:5px;stroke-linejoin:round}
+.ub-edge-label{fill:#d9d6cf;font-size:12px;pointer-events:none}
+.ub-edge-pill{fill:#0f0f11;stroke:#2c2e33;stroke-width:1}
+.ub-labels{z-index:3}
+.ub-node{z-index:2}
 .ub-node{position:absolute;box-sizing:border-box;border:1px solid;border-radius:14px;padding:8px 12px;cursor:grab;
   display:flex;flex-direction:column;gap:4px;user-select:none}
 .ub-node.sel{box-shadow:0 0 0 3px rgba(226,180,90,.18)}
 .ub-node-head{display:flex;justify-content:space-between;align-items:center}
 .ub-kind{font-size:11px;color:#a8a59d;background:rgba(255,255,255,.06);border-radius:999px;padding:1px 8px}
-.ub-text{flex:1;overflow:hidden;word-break:break-word;font-size:15px;white-space:pre-wrap}
+.ub-text{flex:1;min-height:0;overflow:hidden;overflow-wrap:anywhere;font-size:13px;line-height:1.25;white-space:pre-wrap}
 .ub-text.empty{color:#6b6963}
 .ub-edit{flex:1;resize:none;background:rgba(0,0,0,.35);border:1px solid #a8863a;border-radius:8px;color:inherit;font:inherit;padding:4px 6px;outline:none}
 .ub-handle{position:absolute;width:14px;height:14px;border-radius:50%;background:#e2b45a;border:2px solid #08080a;

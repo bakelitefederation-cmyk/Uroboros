@@ -68,13 +68,14 @@ export default function PhoneCheck() {
   }
 
   const known = data ? Object.keys(LABELS).filter((k) => k in data) : [];
-  const rest = data ? Object.keys(data).filter((k) => !known.includes(k)) : [];
+  const rest = data ? Object.keys(data).filter((k) => !known.includes(k) && k !== "results") : [];
+  const found = (data?.results as { title: string; url: string; snippet: string }[] | undefined) ?? [];
   const invalid = data && (data.valid === false || data.isValid === false);
 
   return (
     <ModuleShell
       title="Проверка номера"
-      subtitle="Формат, страна и оператор. Вводите номер в международном формате."
+      subtitle="Поиск упоминаний номера через Serper. Вводите номер в международном формате."
       width="md"
     >
       <div className="flex flex-col sm:flex-row gap-2">
@@ -123,6 +124,16 @@ export default function PhoneCheck() {
               </div>
             ))}
           </dl>
+          {found.length > 0 && (
+            <ul className="mt-4 space-y-3 text-sm">
+              {found.map((r, i) => (
+                <li key={i}>
+                  <a href={r.url} target="_blank" rel="noreferrer" className="font-medium text-[#D4B16A] break-all hover:underline">{r.title || r.url}</a>
+                  <p className="text-gray-400">{r.snippet}</p>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
     </ModuleShell>

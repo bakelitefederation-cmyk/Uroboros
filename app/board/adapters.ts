@@ -332,24 +332,18 @@ const phoneTool: ToolDef = {
   id: 'phone',
   label: 'Проверка номера',
   kinds: ['phone'],
-  hint: 'Только формат, страна и оператор. Владельца номер не раскрывает.',
+  hint: 'Ищет упоминания номера в Google через Serper. Владельца номер не раскрывает.',
   async run(value, signal) {
     const raw = await post('/api/phone', { phone: value.trim() }, signal);
-    const has = str(raw.country) || str(raw.carrier) || str(raw.region);
-    if (!raw.valid && !has) {
-      return { summary: 'Данных нет: номер некорректен или на сервере не задан ключ ABSTRACT_PHONE_KEY.', raw, leads: [] };
-    }
-    const where = [str(raw.country), str(raw.region), str(raw.city)].filter(Boolean).join(', ');
-    const summary = [
-      raw.valid ? 'Номер корректный' : 'Номер не прошёл проверку',
-      where,
-      str(raw.carrier) && `оператор ${str(raw.carrier)}`,
-      str(raw.type) && `тип ${str(raw.type)}`,
-      str(raw.international) && str(raw.international),
-    ]
-      .filter(Boolean)
-      .join('; ');
-    return { summary, raw, leads: [] };
+    const results = arr(raw.results).map(obj);
+    const leads = results.map((r) => lead('url', str(r.url), str(r.title).slice(0, 40) || 'упоминание номера')).filter((l) => l.value);
+    return {
+      summary: results.length
+        ? `Найдено упоминаний: ${results.length}. Это гипотезы: совпадение номера на странице не доказывает связь.`
+        : 'Упоминаний номера в поиске не найдено.',
+      raw,
+      leads: clean(leads, [], 10),
+    };
   },
 };
 
