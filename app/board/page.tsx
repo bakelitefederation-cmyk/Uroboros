@@ -333,6 +333,19 @@ export default function BoardPage() {
     });
   };
 
+  // Результат без зацепок (в т.ч. "ничего не найдено") ложится заметкой, привязанной к источнику
+  const addNoteToBoard = (source: BoardNode, text: string) => {
+    const { w, h } = SIZES.m;
+    const spot = freeSpot(
+      { x: source.x + source.w + 120, y: source.y + source.h / 2 - h / 2, w, h },
+      nodes.map((n) => ({ x: n.x, y: n.y, w: n.w, h: n.h })),
+      w + 40,
+    );
+    const n = makeNode(spot.x + w / 2, spot.y + h / 2, text, { size: 'm', kind: 'note', color: 'slate' });
+    setNodes((ns) => [...ns, n]);
+    setEdges((es) => [...es, { id: uid(), from: n.id, to: source.id, shape: draft.shape, dash: 'dashed', label: 'результат' }]);
+  };
+
   // --- колесо: масштаб к курсору ---
   useEffect(() => {
     const el = viewportRef.current;
@@ -778,6 +791,7 @@ export default function BoardPage() {
           onRunAll={(q) => runAll(selectedNode, q)}
           onCancel={cancelTool}
           onAdd={(leads) => addLeadsToBoard(selectedNode, leads)}
+          onAddNote={(t) => addNoteToBoard(selectedNode, t)}
           onPatch={(p) => patchNode(selectedNode.id, p)}
           onDelete={() => removeNode(selectedNode.id)}
           onClose={() => setPanelOpen(false)}
@@ -827,6 +841,7 @@ interface PanelProps {
   onRunAll: (query: string) => void;
   onCancel: () => void;
   onAdd: (leads: Lead[]) => void;
+  onAddNote: (text: string) => void;
   onPatch: (p: Partial<BoardNode>) => void;
   onDelete: () => void;
   onClose: () => void;
@@ -967,8 +982,16 @@ function ToolPanel(p: PanelProps) {
               ) : (
                 <p className="ub-muted">Новых зацепок в ответе не нашлось.</p>
               )}
-              <button className="ub-btn gold" disabled={!chosen.length} onClick={() => p.onAdd(chosen)}>
-                Добавить результат на доску ({chosen.length})
+              {chosen.length > 0 && (
+                <button className="ub-btn gold" onClick={() => p.onAdd(chosen)}>
+                  Добавить результат на доску ({chosen.length})
+                </button>
+              )}
+              <button
+                className={`ub-btn${chosen.length ? '' : ' gold'}`}
+                onClick={() => p.onAddNote(`${getTool(p.activeTool)?.label ?? 'Результат'}: ${run.summary || (run.leads.length ? '' : 'ничего не найдено')}`.trim())}
+              >
+                {run.leads.length ? 'Добавить сводку заметкой' : 'Добавить на доску как заметку'}
               </button>
               <details>
                 <summary>Сырой ответ</summary>
