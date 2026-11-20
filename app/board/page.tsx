@@ -9,9 +9,10 @@ import Link from 'next/link';
 import {
   COLORS, KINDS, KIND_LABEL, SIZES, boardStorage, detectKind, makeNode, uid,
   type BoardEdge, type BoardNode, type Camera, type Dash, type Kind, type NodeColor,
-  type NodeSize, type SearchState, type Shape, type ToolRun, type Lead,
+  type NodeSize, type SearchState, type Shape, type ToolRun, type ToolPart, type Lead,
 } from './model';
-import { TOOLS, getTool, toolsFor } from './adapters';
+import { TOOLS, autoToolsFor, getTool, runTool as execTool, toolsFor } from './adapters';
+import { freeSpot, snapRect, type GapMark, type GuideLine } from './guides';
 
 // ---------- Геометрия связей ----------
 
@@ -67,6 +68,8 @@ export default function BoardPage() {
   const [draft, setDraft] = useState<{ shape: Shape; dash: Dash }>({ shape: 'curved', dash: 'solid' });
   const [connecting, setConnecting] = useState<{ from: string; side: Side; x: number; y: number } | null>(null);
   const [panning, setPanning] = useState(false);
+  const [snapOn, setSnapOn] = useState(true); // умные направляющие и привязка (Alt при перетаскивании — отключить на время)
+  const [guides, setGuides] = useState<{ lines: GuideLine[]; gaps: GapMark[] } | null>(null);
 
   const viewportRef = useRef<HTMLDivElement>(null);
   const camRef = useRef(cam);
@@ -86,7 +89,22 @@ export default function BoardPage() {
       }
       setLoaded(true);
     });
+    try {
+      if (localStorage.getItem('uroboros.board.snap') === '0') setSnapOn(false);
+    } catch {
+      /* без localStorage привязка просто включена */
+    }
   }, []);
+
+  const toggleSnap = () =>
+    setSnapOn((v) => {
+      try {
+        localStorage.setItem('uroboros.board.snap', v ? '0' : '1');
+      } catch {
+        /* ignore */
+      }
+      return !v;
+    });
 
   useEffect(() => {
     if (!loaded) return;
@@ -165,8 +183,22 @@ export default function BoardPage() {
     setPanelOpen(false);
   };
 
+  // Новая карточка встаёт ровно: притягивается к соседям и не ложится поверх других
+  const placeNew = (cx: number, cy: number, avoidOverlap: boolean) => {
+    const { w, h } = SIZES.m;
+    const others = nodes.map((n) => ({ x: n.x, y: n.y, w: n.w, h: n.h }));
+    let r = { x: cx - w / 2, y: cy - h / 2, w, h };
+    if (snapOn) {
+      const s = snapRect(r, others, 14 / camRef.current.zoom);
+      r = { ...r, x: s.x, y: s.y };
+    }
+    if (avoidOverlap) r = freeSpot(r, others, w + 24);
+    return { x: r.x + w / 2, y: r.y + h / 2 };
+  };
+
   const createCard = (x?: number, y?: number) => {
-    const c = x === undefined || y === undefined ? viewCenter() : { x, y };
+    const c0 = x === undefined || y === undefined ? viewCenter() : { x, y };
+    const c = placeNew(c0.x, c0.y, x === undefined || y === undefined);
     const id = addNode(c.x, c.y);
     setEditingId(id);
     setSearch((s) => ({ ...s, selectedNodeId: id }));
@@ -184,41 +216,119 @@ export default function BoardPage() {
     const put = (r: ToolRun) => setSearch((s) => ({ ...s, searchResults: { ...s.searchResults, [node.id]: r } }));
     put({ ...base, status: 'running' });
     try {
-      const out = await tool.run(query, ac.signal);
+      const out = await execTool(tool, query, ac.signal);
       put({ ...base, status: 'done', summary: out.summary, raw: out.raw, leads: out.leads, at: Date.now() });
     } catch (e) {
-      if ((e as Error).name === 'AbortError') return;
+      if ((e as Error).name === 'AbortError') {
+        if (abortRef.current === ac) put({ ...base, status: 'error', error: 'Отменено', at: Date.now() });
+        return;
+      }
       put({ ...base, status: 'error', error: (e as Error).message, at: Date.now() });
     }
   };
 
+  // Все подходящие формату модули сразу (по 3 параллельно); зацепки объединяются без дублей
+  const runAll = async (node: BoardNode, query: string) => {
+    const list = autoToolsFor(node.kind);
+    if (!list.length) return;
+    abortRef.current?.abort();
+    const ac = new AbortController();
+    abortRef.current = ac;
+    const parts: ToolPart[] = list.map((t) => ({ toolId: t.id, label: t.label, status: 'running' }));
+    const raws: Record<string, unknown> = {};
+    const leadMap = new Map<string, Lead>();
+    const base = { toolId: 'all', query, at: Date.now() };
+    const put = (r: Omit<ToolRun, 'toolId' | 'query' | 'at'> & Partial<ToolRun>) =>
+      setSearch((s) => ({ ...s, searchResults: { ...s.searchResults, [node.id]: { ...base, ...r } as ToolRun } }));
+    const progress = () => put({ status: 'running', parts: parts.map((p) => ({ ...p })), leads: [...leadMap.values()] });
+    progress();
+
+    let next = 0;
+    const worker = async () => {
+      while (next < list.length && !ac.signal.aborted) {
+        const i = next++;
+        try {
+          const out = await execTool(list[i], query, ac.signal);
+          parts[i] = { ...parts[i], status: 'done', summary: out.summary };
+          raws[list[i].id] = out.raw;
+          out.leads.forEach((l) => {
+            const k = `${l.kind}:${l.value.toLowerCase()}`;
+            if (!leadMap.has(k)) leadMap.set(k, l);
+          });
+        } catch (e) {
+          if ((e as Error).name === 'AbortError') return;
+          parts[i] = { ...parts[i], status: 'error', error: (e as Error).message };
+        }
+        if (!ac.signal.aborted) progress();
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(3, list.length) }, worker));
+    if (ac.signal.aborted) {
+      if (abortRef.current === ac) put({ status: 'error', error: 'Отменено', leads: [...leadMap.values()], parts: parts.map((p) => ({ ...p })) });
+      return;
+    }
+
+    const ok = parts.filter((p) => p.status === 'done').length;
+    put({
+      status: ok ? 'done' : 'error',
+      summary: `Выполнено модулей: ${ok} из ${list.length}`,
+      error: ok ? undefined : 'Ни один модуль не ответил',
+      raw: raws,
+      leads: [...leadMap.values()],
+      parts: parts.map((p) => ({ ...p })),
+      at: Date.now(),
+    });
+  };
+
   const cancelTool = () => abortRef.current?.abort();
 
+  // Зацепки ложатся ровной сеткой справа от источника (столбцы по 8, равные промежутки, по центру относительно него)
   const addLeadsToBoard = (source: BoardNode, leads: Lead[]) => {
     if (!leads.length) return;
-    const gap = 20;
-    const startY = source.y + source.h / 2 - ((leads.length - 1) * (SIZES.s.h + gap)) / 2;
+    const gapY = 20;
+    const gapX = 40;
+    const rows = 8;
+    const { w: cw, h: ch } = SIZES.s;
+
     const fresh: BoardNode[] = [];
-    const links: Array<[string, string]> = [];
-    leads.forEach((l, i) => {
+    const links: Array<{ from: string; label: string }> = [];
+    const toPlace: Lead[] = [];
+    leads.forEach((l) => {
       const existing = nodes.find((n) => n.kind === l.kind && n.text.trim().toLowerCase() === l.value.toLowerCase());
-      if (existing) {
-        links.push([existing.id, source.id]);
-        return;
-      }
-      const n = makeNode(source.x + source.w + 170 + SIZES.s.w / 2, startY + i * (SIZES.s.h + gap) + SIZES.s.h / 2, l.value, {
-        size: 's',
-        kind: l.kind,
-        color: 'blue',
-      });
-      fresh.push(n);
-      links.push([n.id, source.id]);
+      if (existing) links.push({ from: existing.id, label: l.label });
+      else toPlace.push(l);
     });
+
+    if (toPlace.length) {
+      const cols = Math.ceil(toPlace.length / rows);
+      const colHeight = (n: number) => n * ch + (n - 1) * gapY;
+      const tallest = colHeight(Math.min(rows, toPlace.length));
+      const groupW = cols * cw + (cols - 1) * gapX;
+      // свободное место справа от источника, чтобы не лечь поверх чужих карточек
+      const spot = freeSpot(
+        { x: source.x + source.w + 120, y: source.y + source.h / 2 - tallest / 2, w: groupW, h: tallest },
+        nodes.map((n) => ({ x: n.x, y: n.y, w: n.w, h: n.h })),
+        cw + gapX,
+      );
+      toPlace.forEach((l, i) => {
+        const col = Math.floor(i / rows);
+        const inCol = Math.min(rows, toPlace.length - col * rows);
+        const top = source.y + source.h / 2 - colHeight(inCol) / 2;
+        const n = makeNode(spot.x + col * (cw + gapX) + cw / 2, top + (i % rows) * (ch + gapY) + ch / 2, l.value, {
+          size: 's',
+          kind: l.kind,
+          color: 'blue',
+        });
+        fresh.push(n);
+        links.push({ from: n.id, label: l.label });
+      });
+    }
+
     setNodes((ns) => [...ns, ...fresh]);
     setEdges((es) => {
       const add = links
-        .filter(([f, t]) => !es.some((e) => e.from === f && e.to === t))
-        .map<BoardEdge>(([from, to]) => ({ id: uid(), from, to, shape: draft.shape, dash: 'dashed', label: 'найден на' }));
+        .filter((l) => !es.some((e) => e.from === l.from && e.to === source.id))
+        .map<BoardEdge>((l) => ({ id: uid(), from: l.from, to: source.id, shape: draft.shape, dash: 'dashed', label: l.label || 'найден на' }));
       return [...es, ...add];
     });
   };
@@ -368,7 +478,8 @@ export default function BoardPage() {
     if (toId) addEdge(connecting.from, toId);
     else {
       const w = toWorld(e.clientX, e.clientY);
-      const id = addNode(w.x + 60, w.y);
+      const c = placeNew(w.x + 60, w.y, false);
+      const id = addNode(c.x, c.y);
       addEdge(connecting.from, id);
       setEditingId(id);
       setSearch((s) => ({ ...s, selectedNodeId: id }));
@@ -393,11 +504,23 @@ export default function BoardPage() {
     if (!d.moved && Math.abs(dx) + Math.abs(dy) < 4) return;
     d.moved = true;
     const z = camRef.current.zoom;
-    patchNode(d.id, { x: d.ox + dx / z, y: d.oy + dy / z });
+    const nx = d.ox + dx / z;
+    const ny = d.oy + dy / z;
+    const me = nodes.find((n) => n.id === d.id);
+    if (snapOn && !e.altKey && me) {
+      const others = nodes.filter((n) => n.id !== d.id).map((n) => ({ x: n.x, y: n.y, w: n.w, h: n.h }));
+      const r = snapRect({ x: nx, y: ny, w: me.w, h: me.h }, others, 8 / z);
+      patchNode(d.id, { x: r.x, y: r.y });
+      setGuides(r.lines.length || r.gaps.length ? { lines: r.lines, gaps: r.gaps } : null);
+    } else {
+      patchNode(d.id, { x: nx, y: ny });
+      setGuides(null);
+    }
   };
   const onNodeUp = () => {
     const d = drag.current;
     drag.current = null;
+    setGuides(null);
     if (d && !d.moved) openNode(d.id);
   };
 
@@ -481,6 +604,17 @@ export default function BoardPage() {
               );
             })}
 
+            {guides?.lines.map((l, i) =>
+              l.axis === 'x' ? (
+                <line key={`gl${i}`} className="ub-guide" x1={l.pos} x2={l.pos} y1={l.from - 14} y2={l.to + 14} />
+              ) : (
+                <line key={`gl${i}`} className="ub-guide" y1={l.pos} y2={l.pos} x1={l.from - 14} x2={l.to + 14} />
+              ),
+            )}
+            {guides?.gaps.map((g, i) => (
+              <GapView key={`gp${i}`} g={g} zoom={cam.zoom} />
+            ))}
+
             {connPath && <path d={connPath} fill="none" stroke={EDGE_COLOR[draft.dash]} strokeWidth={2} strokeDasharray={draft.dash === 'dashed' ? '8 6' : undefined} markerEnd={`url(#ah-${draft.dash})`} />}
           </svg>
 
@@ -560,6 +694,11 @@ export default function BoardPage() {
             </button>
           ))}
         </div>
+        <div className="ub-seg" title="Умные направляющие: выравнивание и равные промежутки при перетаскивании. Alt — отключить на время.">
+          <button className={snapOn ? 'on' : ''} onClick={toggleSnap}>
+            🧲 Привязка {snapOn ? 'вкл' : 'выкл'}
+          </button>
+        </div>
         <div className="ub-seg">
           <button onClick={() => zoomBy(1 / 1.2)}>−</button>
           <button onClick={fitAll} title="Показать всё">{Math.round(cam.zoom * 100)}%</button>
@@ -622,6 +761,7 @@ export default function BoardPage() {
           activeTool={search.activeTool}
           onTool={(id) => setSearch((s) => ({ ...s, activeTool: id }))}
           onRun={(q) => runTool(selectedNode, search.activeTool ?? '', q)}
+          onRunAll={(q) => runAll(selectedNode, q)}
           onCancel={cancelTool}
           onAdd={(leads) => addLeadsToBoard(selectedNode, leads)}
           onPatch={(p) => patchNode(selectedNode.id, p)}
@@ -634,6 +774,34 @@ export default function BoardPage() {
   );
 }
 
+// ---------- Размер промежутка между карточками (подсказка равных отступов) ----------
+
+function GapView({ g, zoom }: { g: GapMark; zoom: number }) {
+  const t = 5 / zoom; // половина длины засечки
+  const fs = 11 / zoom;
+  const horizontal = g.axis === 'x';
+  const mid = (g.from + g.to) / 2;
+  return (
+    <g className="ub-gap">
+      {horizontal ? (
+        <>
+          <line x1={g.from} x2={g.to} y1={g.at} y2={g.at} />
+          <line x1={g.from} x2={g.from} y1={g.at - t} y2={g.at + t} />
+          <line x1={g.to} x2={g.to} y1={g.at - t} y2={g.at + t} />
+          <text x={mid} y={g.at + 15 / zoom} textAnchor="middle" fontSize={fs}>{Math.round(g.gap)}</text>
+        </>
+      ) : (
+        <>
+          <line x1={g.at} x2={g.at} y1={g.from} y2={g.to} />
+          <line x1={g.at - t} x2={g.at + t} y1={g.from} y2={g.from} />
+          <line x1={g.at - t} x2={g.at + t} y1={g.to} y2={g.to} />
+          <text x={g.at + 8 / zoom} y={mid + fs / 3} fontSize={fs}>{Math.round(g.gap)}</text>
+        </>
+      )}
+    </g>
+  );
+}
+
 // ---------- Боковая панель ----------
 
 interface PanelProps {
@@ -642,6 +810,7 @@ interface PanelProps {
   activeTool: string | null;
   onTool: (id: string) => void;
   onRun: (query: string) => void;
+  onRunAll: (query: string) => void;
   onCancel: () => void;
   onAdd: (leads: Lead[]) => void;
   onPatch: (p: Partial<BoardNode>) => void;
@@ -713,6 +882,7 @@ function ToolPanel(p: PanelProps) {
             {others.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
           </optgroup>
         </select>
+        {getTool(p.activeTool)?.hint && <p className="ub-muted ub-hint">{getTool(p.activeTool)?.hint}</p>}
         <label>Запрос</label>
         <input
           className="ub-input"
@@ -726,6 +896,11 @@ function ToolPanel(p: PanelProps) {
           </button>
           {running && <button className="ub-btn" onClick={p.onCancel}>Отмена</button>}
         </div>
+        {autoToolsFor(node.kind).length > 1 && (
+          <button className="ub-btn" disabled={!query.trim() || running} onClick={() => p.onRunAll(query.trim())} title="Запускает все модули, подходящие формату карточки, и собирает зацепки вместе">
+            Запустить все подходящие ({autoToolsFor(node.kind).length})
+          </button>
+        )}
       </section>
 
       {run && (
@@ -735,6 +910,22 @@ function ToolPanel(p: PanelProps) {
             {run.status === 'done' && (run.summary ?? 'Готово')}
             {run.status === 'error' && `Ошибка: ${run.error}`}
           </div>
+
+          {run.parts && (
+            <ul className="ub-parts">
+              {run.parts.map((pt) => (
+                <li key={pt.toolId}>
+                  <i className={`ub-pdot ${pt.status}`} />
+                  <div>
+                    <b>{pt.label}</b>
+                    <span className="ub-muted">
+                      {pt.status === 'running' ? ' выполняется…' : pt.status === 'error' ? ` ошибка: ${pt.error}` : ` ${pt.summary}`}
+                    </span>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
 
           {run.status === 'done' && (
             <>
@@ -754,6 +945,7 @@ function ToolPanel(p: PanelProps) {
                         />
                         <span className="ub-kind">{KIND_LABEL[l.kind]}</span>
                         <span className="ub-lead-val">{l.value}</span>
+                        {l.label && <span className="ub-lead-label">{l.label}</span>}
                       </label>
                     </li>
                   ))}
@@ -833,6 +1025,18 @@ const CSS = `
 .ub-leads{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;max-height:260px;overflow:auto}
 .ub-leads label{display:flex;gap:8px;align-items:center;color:#e8e6e1;font-size:13px;cursor:pointer}
 .ub-lead-val{word-break:break-all}.ub-muted{color:#8c8a84;margin:0}
+.ub-guide{stroke:#ff4d8d;stroke-width:1.5;vector-effect:non-scaling-stroke;stroke-linecap:round}
+.ub-gap line{stroke:#3fd6c4;stroke-width:1.5;vector-effect:non-scaling-stroke}
+.ub-gap text{fill:#3fd6c4;paint-order:stroke;stroke:#08080a;stroke-width:3px;font-weight:600}
+.ub-hint{font-size:12px}
+.ub-parts{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;font-size:13px}
+.ub-parts li{display:flex;gap:8px;align-items:flex-start}
+.ub-pdot{flex:none;width:8px;height:8px;border-radius:50%;margin-top:6px;background:#555}
+.ub-pdot.running{background:#f0c870;animation:ub-pulse 1s ease-in-out infinite}
+.ub-pdot.done{background:#5fbf7f}.ub-pdot.error{background:#d9737b}
+@keyframes ub-pulse{50%{opacity:.35}}
+@media (prefers-reduced-motion:reduce){.ub-pdot.running{animation:none}}
+.ub-lead-label{margin-left:auto;color:#8c8a84;font-size:11px;white-space:nowrap}
 .ub-panel details pre{max-height:240px;overflow:auto;background:#141416;border-radius:10px;padding:8px;font-size:11px;white-space:pre-wrap;word-break:break-all}
 @media (max-width:640px){.ub-panel{width:100%}}
 `;

@@ -77,13 +77,23 @@ export interface Lead {
   label: string;
 }
 
+/** Отдельный модуль внутри запуска «все подходящие» */
+export interface ToolPart {
+  toolId: string;
+  label: string;
+  status: 'running' | 'done' | 'error';
+  summary?: string;
+  error?: string;
+}
+
 export interface ToolRun {
   status: 'running' | 'done' | 'error';
-  toolId: string;
+  toolId: string; // id модуля или 'all' для запуска всех подходящих
   query: string;
   summary?: string;
   raw?: unknown;
   leads: Lead[];
+  parts?: ToolPart[]; // есть только у toolId === 'all'
   error?: string;
   at: number;
 }
